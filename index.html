@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Checklist with Editable Media</title>
+<title>Jensen Checklist</title>
 <style>
 body {
     font-family: Arial, sans-serif;
@@ -42,6 +42,19 @@ body {
     height:100%;
     object-fit:contain;
     pointer-events:none;
+}
+
+.media-item .deleteBtn {
+    position:absolute;
+    top:0;
+    right:0;
+    background:red;
+    color:white;
+    border:none;
+    font-size:12px;
+    padding:2px 4px;
+    cursor:pointer;
+    display:none;
 }
 
 .container {
@@ -291,6 +304,18 @@ function renderMedia(){
         img.src=item.src;
         div.appendChild(img);
 
+        // Delete button (only visible in edit mode)
+        const delBtn=document.createElement("button");
+        delBtn.textContent="✕";
+        delBtn.className="deleteBtn";
+        delBtn.onclick=()=>{
+            media.splice(index,1);
+            saveMedia(media);
+            render();
+        };
+        if(editMode) delBtn.style.display="block";
+        div.appendChild(delBtn);
+
         bgCanvas.appendChild(div);
 
         if(editMode){
@@ -308,10 +333,10 @@ function renderMedia(){
 addMediaBtn.addEventListener("click",()=>{ mediaInput.click(); });
 mediaInput.addEventListener("change",(e)=>{
     const files=[...e.target.files];
+    const media=getMedia();
     files.forEach(file=>{
         const reader=new FileReader();
         reader.onload=(ev)=>{
-            const media=getMedia();
             media.push({src:ev.target.result,x:50,y:50,width:150,height:150});
             saveMedia(media);
             render();
@@ -361,14 +386,13 @@ function makeDraggableResizable(el,index){
     });
 
     window.addEventListener("mouseup",(e)=>{
+        const media=getMedia();
         if(isDragging){
-            const media=getMedia();
             media[index].x=parseInt(el.style.left);
             media[index].y=parseInt(el.style.top);
             saveMedia(media);
         }
         if(isResizing){
-            const media=getMedia();
             media[index].width=parseInt(el.style.width);
             media[index].height=parseInt(el.style.height);
             saveMedia(media);
