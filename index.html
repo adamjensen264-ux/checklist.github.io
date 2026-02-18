@@ -3,34 +3,103 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Daily Checklist</title>
+<title>Daily Checklist with Background</title>
 
 <style>
 body {
     font-family: Arial, sans-serif;
-    background:#111;
-    color:white;
+    margin:0;
+    padding:0;
+    height:100vh;
     display:flex;
     justify-content:center;
-    padding-top:40px;
+    align-items:flex-start;
+    background:#111;
+    color:white;
+    overflow: hidden;
 }
 
+/* Background media container */
+#bgContainer {
+    position: fixed;
+    top:0; left:0;
+    width:100%; height:100%;
+    z-index: -1;
+    display:flex;
+    flex-wrap: wrap;
+    justify-content:center;
+    align-items:center;
+    background-size: cover;
+    background-position: center;
+}
+
+/* Media thumbnails container */
+#mediaThumbnails {
+    position: fixed;
+    bottom:10px;
+    left:50%;
+    transform:translateX(-50%);
+    display:flex;
+    gap:10px;
+    z-index: 2;
+}
+
+.media-thumb {
+    position: relative;
+    width:60px;
+    height:60px;
+    overflow:hidden;
+    border:2px solid #fff;
+    border-radius:8px;
+    cursor: pointer;
+}
+
+.media-thumb img {
+    width:100%;
+    height:100%;
+    object-fit:cover;
+}
+
+.media-thumb button {
+    position:absolute;
+    top:2px;
+    right:2px;
+    background:red;
+    border:none;
+    color:white;
+    font-size:12px;
+    padding:0 4px;
+    border-radius:3px;
+    cursor:pointer;
+}
+
+/* Container */
 .container {
-    background:#1c1c1c;
+    background:#1c1c1ccc;
     padding:25px;
     border-radius:12px;
     width:380px;
+    margin-top:30px;
+    box-shadow:0 0 20px rgba(0,0,0,0.5);
 }
 
-h1 { text-align:center; }
-
+/* Tasks */
 .task {
     display:flex;
     justify-content:space-between;
     align-items:center;
     margin:8px 0;
+    padding:5px 8px;
+    border-radius:6px;
+    background:#222;
+    cursor: grab;
 }
 
+.task.dragging {
+    opacity:0.5;
+}
+
+/* Controls */
 button {
     background:#333;
     border:none;
@@ -42,31 +111,37 @@ button {
 
 button:hover { background:#555; }
 
-input[type="text"] {
+input[type="text"], input[type="time"] {
     width:70%;
     padding:6px;
 }
 
-.controls {
-    margin-top:15px;
-    display:flex;
-    gap:8px;
-}
+.controls { margin-top:10px; display:flex; gap:8px; }
 
-.small {
-    font-size:13px;
-    color:#aaa;
-    text-align:center;
-    margin-top:10px;
+.small { font-size:13px; color:#aaa; text-align:center; margin-top:10px; }
+
+#addMediaBtn {
+    width:60px;
+    height:60px;
+    border:2px dashed #fff;
+    border-radius:8px;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    font-size:24px;
+    cursor:pointer;
+    color:#fff;
+    user-select:none;
 }
 </style>
 </head>
 
 <body>
 
+<div id="bgContainer"></div>
+
 <div class="container">
 <h1>Daily Checklist</h1>
-
 <div id="taskList"></div>
 
 <div class="controls">
@@ -86,153 +161,217 @@ input[type="text"] {
 </div>
 
 <div class="small" id="info"></div>
-
 </div>
 
+<!-- Media Thumbnails -->
+<div id="mediaThumbnails">
+    <div id="addMediaBtn">+</div>
+</div>
+
+<input type="file" id="mediaInput" accept="image/*,image/gif" style="display:none" multiple>
+
 <script>
+/* ---------- STORAGE ---------- */
 const TASK_KEY = "tasks";
 const RESET_TIME_KEY = "resetTime";
 const LAST_RESET_KEY = "lastReset";
+const MEDIA_KEY = "mediaFiles";
 
-/* ---------- STORAGE ---------- */
+/* ---------- TASKS ---------- */
+function getTasks(){ return JSON.parse(localStorage.getItem(TASK_KEY)) || [
+    {text:"Workout", checked:false},
+    {text:"Drink Water", checked:false},
+    {text:"Read", checked:false}
+];}
 
-function getTasks() {
-    return JSON.parse(localStorage.getItem(TASK_KEY)) || [
-        {text:"Workout", checked:false},
-        {text:"Drink Water", checked:false},
-        {text:"Read", checked:false}
-    ];
-}
+function saveTasks(tasks){ localStorage.setItem(TASK_KEY, JSON.stringify(tasks));}
 
-function saveTasks(tasks){
-    localStorage.setItem(TASK_KEY, JSON.stringify(tasks));
-}
+/* ---------- RENDER TASKS ---------- */
+const taskListEl = document.getElementById("taskList");
 
-/* ---------- RENDER ---------- */
+let dragSrcIndex = null;
 
-function render() {
-    const list = document.getElementById("taskList");
-    list.innerHTML = "";
-
+function render(){
+    taskListEl.innerHTML = "";
     const tasks = getTasks();
 
-    tasks.forEach((task, index) => {
+    tasks.forEach((task,index)=>{
+        const div=document.createElement("div");
+        div.className="task";
+        div.draggable=true;
 
-        const div = document.createElement("div");
-        div.className = "task";
-
-        const label = document.createElement("label");
-
-        const checkbox = document.createElement("input");
+        const label=document.createElement("label");
+        const checkbox=document.createElement("input");
         checkbox.type="checkbox";
-        checkbox.checked = task.checked;
-
-        checkbox.onchange = () => {
-            tasks[index].checked = checkbox.checked;
-            saveTasks(tasks);
-        };
-
+        checkbox.checked=task.checked;
+        checkbox.onchange=()=>{tasks[index].checked=checkbox.checked; saveTasks(tasks);}
         label.appendChild(checkbox);
         label.append(" " + task.text);
 
-        const delBtn = document.createElement("button");
+        const delBtn=document.createElement("button");
         delBtn.textContent="✕";
-        delBtn.onclick = () => {
+        delBtn.onclick=()=>{
             tasks.splice(index,1);
             saveTasks(tasks);
             render();
-        };
+        }
 
         div.appendChild(label);
         div.appendChild(delBtn);
-        list.appendChild(div);
+        taskListEl.appendChild(div);
+
+        /* Drag & Drop */
+        div.addEventListener("dragstart",(e)=>{
+            dragSrcIndex=index;
+            div.classList.add("dragging");
+        });
+
+        div.addEventListener("dragend",(e)=>{
+            div.classList.remove("dragging");
+        });
+
+        div.addEventListener("dragover",(e)=>{
+            e.preventDefault();
+        });
+
+        div.addEventListener("drop",(e)=>{
+            e.preventDefault();
+            if(dragSrcIndex===null || dragSrcIndex===index) return;
+            const moved=tasks.splice(dragSrcIndex,1)[0];
+            tasks.splice(index,0,moved);
+            saveTasks(tasks);
+            render();
+        });
     });
 
     updateInfo();
+    renderMedia();
 }
 
 /* ---------- TASK MANAGEMENT ---------- */
-
 function addTask(){
-    const input = document.getElementById("newTask");
-    const text = input.value.trim();
+    const input=document.getElementById("newTask");
+    const text=input.value.trim();
     if(!text) return;
-
-    const tasks = getTasks();
+    const tasks=getTasks();
     tasks.push({text, checked:false});
     saveTasks(tasks);
-
     input.value="";
     render();
 }
 
 /* ---------- RESET ---------- */
-
 function manualReset(){
-    const tasks = getTasks();
-    tasks.forEach(t => t.checked=false);
+    const tasks=getTasks();
+    tasks.forEach(t=>t.checked=false);
     saveTasks(tasks);
-
     localStorage.setItem(LAST_RESET_KEY, Date.now());
     render();
 }
 
 function getResetMinutes(){
-    const value = localStorage.getItem(RESET_TIME_KEY) || "04:00";
-    const [h,m] = value.split(":").map(Number);
+    const value=localStorage.getItem(RESET_TIME_KEY)||"04:00";
+    const [h,m]=value.split(":").map(Number);
     return h*60+m;
 }
 
 function checkDailyReset(){
-    const lastReset = Number(localStorage.getItem(LAST_RESET_KEY)||0);
+    const lastReset=Number(localStorage.getItem(LAST_RESET_KEY)||0);
+    const now=new Date();
+    const minutesNow=now.getHours()*60+now.getMinutes();
+    const resetMinutes=getResetMinutes();
 
-    const now = new Date();
-    const minutesNow = now.getHours()*60 + now.getMinutes();
-    const resetMinutes = getResetMinutes();
-
-    const todayReset = new Date();
+    const todayReset=new Date();
     todayReset.setHours(0,0,0,0);
     todayReset.setMinutes(resetMinutes);
 
-    if(minutesNow < resetMinutes){
-        todayReset.setDate(todayReset.getDate()-1);
-    }
+    if(minutesNow<resetMinutes){ todayReset.setDate(todayReset.getDate()-1); }
 
-    if(lastReset < todayReset.getTime()){
+    if(lastReset<todayReset.getTime()){
         manualReset();
-        localStorage.setItem(LAST_RESET_KEY, todayReset.getTime());
+        localStorage.setItem(LAST_RESET_KEY,todayReset.getTime());
     }
 }
 
 /* ---------- RESET TIME UI ---------- */
-
-const resetInput = document.getElementById("resetTime");
-
+const resetInput=document.getElementById("resetTime");
 function loadResetTime(){
-    const saved = localStorage.getItem(RESET_TIME_KEY) || "04:00";
-    resetInput.value = saved;
+    const saved=localStorage.getItem(RESET_TIME_KEY) || "04:00";
+    resetInput.value=saved;
 }
-
-resetInput.addEventListener("change", ()=>{
-    localStorage.setItem(RESET_TIME_KEY, resetInput.value);
+resetInput.addEventListener("change",()=>{
+    localStorage.setItem(RESET_TIME_KEY,resetInput.value);
     updateInfo();
 });
 
 /* ---------- INFO ---------- */
-
 function updateInfo(){
-    const time = localStorage.getItem(RESET_TIME_KEY) || "04:00";
-    document.getElementById("info").textContent =
-        `Checklist resets daily at ${time}`;
+    const time=localStorage.getItem(RESET_TIME_KEY)||"04:00";
+    document.getElementById("info").textContent=`Checklist resets daily at ${time}`;
 }
 
-/* ---------- INIT ---------- */
+/* ---------- MEDIA ---------- */
+const bgContainer=document.getElementById("bgContainer");
+const mediaInput=document.getElementById("mediaInput");
+const addMediaBtn=document.getElementById("addMediaBtn");
 
+function getMedia(){ return JSON.parse(localStorage.getItem(MEDIA_KEY)) || []; }
+function saveMedia(media){ localStorage.setItem(MEDIA_KEY, JSON.stringify(media)); }
+
+function renderMedia(){
+    const media=getMedia();
+    bgContainer.innerHTML="";
+    media.forEach((data,index)=>{
+        const img=document.createElement("img");
+        img.src=data;
+        img.style.position="absolute";
+        img.style.width="100%";
+        img.style.height="100%";
+        img.style.objectFit="cover";
+        bgContainer.appendChild(img);
+    });
+
+    const thumbs=document.getElementById("mediaThumbnails");
+    thumbs.querySelectorAll(".media-thumb").forEach(e=>e.remove());
+    media.forEach((data,index)=>{
+        const div=document.createElement("div");
+        div.className="media-thumb";
+        const img=document.createElement("img");
+        img.src=data;
+        const delBtn=document.createElement("button");
+        delBtn.textContent="✕";
+        delBtn.onclick=()=>{
+            media.splice(index,1);
+            saveMedia(media);
+            render();
+        }
+        div.appendChild(img);
+        div.appendChild(delBtn);
+        thumbs.appendChild(div);
+    });
+}
+
+/* Add Media via + button */
+addMediaBtn.addEventListener("click",()=>{ mediaInput.click(); });
+mediaInput.addEventListener("change",(e)=>{
+    const files=[...e.target.files];
+    files.forEach(file=>{
+        const reader=new FileReader();
+        reader.onload=(ev)=>{
+            const media=getMedia();
+            media.push(ev.target.result);
+            saveMedia(media);
+            render();
+        }
+        reader.readAsDataURL(file);
+    });
+    mediaInput.value="";
+});
+
+/* ---------- INIT ---------- */
 loadResetTime();
 checkDailyReset();
 render();
-
 </script>
-
 </body>
 </html>
