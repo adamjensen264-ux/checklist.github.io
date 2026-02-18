@@ -55,6 +55,7 @@ body {
     padding:2px 4px;
     cursor:pointer;
     display:none;
+    z-index:5;
 }
 
 .container {
@@ -309,8 +310,9 @@ function renderMedia(){
         delBtn.textContent="✕";
         delBtn.className="deleteBtn";
         delBtn.onclick=()=>{
-            media.splice(index,1);
-            saveMedia(media);
+            const mediaArr=getMedia();
+            mediaArr.splice(index,1);
+            saveMedia(mediaArr);
             render();
         };
         if(editMode) delBtn.style.display="block";
@@ -330,22 +332,29 @@ function renderMedia(){
 }
 
 /* ---------- ADD MEDIA ---------- */
-addMediaBtn.addEventListener("click", () => { mediaInput.click(); });
+addMediaBtn.addEventListener("click", () => {
+    // Reset input value first so change will trigger every time
+    mediaInput.value = "";
+    mediaInput.click();
+});
 
 mediaInput.addEventListener("change", (e) => {
-    const files = [...e.target.files];
-    const media = getMedia(); // Get existing media
+    const files = Array.from(e.target.files);
+    const media = getMedia(); // existing media
+    let filesLoaded = 0;
+
     files.forEach(file => {
         const reader = new FileReader();
         reader.onload = (ev) => {
             media.push({ src: ev.target.result, x: 50, y: 50, width: 150, height: 150 });
-            saveMedia(media);
-            render();
+            filesLoaded++;
+            if(filesLoaded === files.length){
+                saveMedia(media);
+                render();
+            }
         };
         reader.readAsDataURL(file);
     });
-    // ⚡ Reset input value to allow multiple adds of same files
-    mediaInput.value = "";
 });
 
 /* ---------- EDIT MODE ---------- */
