@@ -2,9 +2,9 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Daily Checklist2</title>
+<title>Daily Checklist with History</title>
 <style>
-body{
+body {
   margin:0;
   font-family:Arial, Helvetica, sans-serif;
   background:#111;
@@ -12,19 +12,17 @@ body{
   text-align:center;
 }
 
-.container{
-  position:relative;
-  z-index:2;
-  max-width:650px;
+.container {
+  max-width:700px;
   margin:40px auto;
   background:#1e1e1e;
   padding:20px;
   border-radius:10px;
 }
 
-ul{list-style:none;padding:0;}
+ul { list-style:none; padding:0; }
 
-li{
+li {
   background:#2a2a2a;
   margin:6px 0;
   padding:8px;
@@ -35,7 +33,7 @@ li{
   cursor:grab;
 }
 
-button{
+button {
   padding:6px 10px;
   margin:4px;
   border:none;
@@ -45,255 +43,178 @@ button{
   cursor:pointer;
 }
 
-input[type=text]{padding:6px;width:70%;}
-
-/* MEDIA LAYER */
-#mediaLayer{
-  position:fixed;
-  inset:0;
-  z-index:1;
-}
-
-.media{
-  position:absolute;
-}
-
-.media img{
-  width:100%;
-  height:100%;
-  object-fit:cover;
-  border-radius:8px;
-  pointer-events:none;
-}
-
-.deleteBtn{
-  position:absolute;
-  top:-10px;
-  right:-10px;
-  width:22px;
-  height:22px;
-  border-radius:50%;
-  background:red;
-  display:none;
-}
-
-.resize{
-  width:14px;
-  height:14px;
-  background:white;
-  position:absolute;
-  right:0;
-  bottom:0;
-  cursor:nwse-resize;
-  display:none;
-}
-
-.edit .deleteBtn,
-.edit .resize{
-  display:block;
+input[type=text], input[type=date], input[type=time] {
+  padding:6px;
 }
 </style>
 </head>
 <body>
 
-<div id="mediaLayer"></div>
-
 <div class="container">
-<h2>Daily Checklist</h2>
+<h2>Daily Checklist with History</h2>
 
-<input id="taskInput" placeholder="New task">
+<label>Select Date:</label>
+<input type="date" id="datePicker"><br><br>
+
+<input type="text" id="taskInput" placeholder="New custom task">
 <button id="addTask">Add Task</button>
 
 <ul id="taskList"></ul>
 
 <br>
-
-Reset Time:
+<label>Daily Reset Time:</label>
 <input type="time" id="resetTime">
 <button id="manualReset">Manual Reset</button>
-
-<hr>
-
-<button id="toggleEdit">Edit Media</button>
-<button id="addMedia">+ Media</button>
-<input type="file" id="fileInput" accept="image/*,image/gif" multiple hidden>
 </div>
 
 <script>
 /* ===== STORAGE HELPERS ===== */
-const load=(k,d)=>JSON.parse(localStorage.getItem(k)||JSON.stringify(d));
-const save=(k,v)=>localStorage.setItem(k,JSON.stringify(v));
+const load = (key, def) => JSON.parse(localStorage.getItem(key) || JSON.stringify(def));
+const save = (key, val) => localStorage.setItem(key, JSON.stringify(val));
 
-/* ===== TASK SYSTEM ===== */
-const taskList=document.getElementById("taskList");
-let draggedTaskIndex=null;
+/* ===== INITIAL DATA ===== */
+const baseDailyTasks = [
+  {text:"Wake up early", done:false},
+  {text:"Workout", done:false},
+  {text:"Breakfast", done:false},
+  {text:"Work/Study", done:false},
+  {text:"Dinner", done:false}
+];
+
+let selectedDate = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
+document.getElementById("datePicker").value = selectedDate;
+
+function getHistory(){
+  return load("checklistHistory", {});
+}
+
+function saveHistory(history){
+  save("checklistHistory", history);
+}
+
+function ensureDateExists(date){
+  const history = getHistory();
+  if(!history[date]){
+    history[date] = {
+      dailyTasks: baseDailyTasks.map(t=>({...t})), 
+      customTasks: []
+    };
+    saveHistory(history);
+  }
+}
+
+/* ===== TASK RENDERING ===== */
+const taskList = document.getElementById("taskList");
+let draggedTaskIndex = null;
 
 function renderTasks(){
-  const tasks=load("tasks",[]);
-  taskList.innerHTML="";
+  ensureDateExists(selectedDate);
+  const history = getHistory();
+  const daily = history[selectedDate].dailyTasks;
+  const custom = history[selectedDate].customTasks;
+  const tasks = [...daily, ...custom];
+
+  taskList.innerHTML = "";
   tasks.forEach((t,i)=>{
-    const li=document.createElement("li");
-    li.draggable=true;
-    li.dataset.index=i;
-    li.innerHTML=`
+    const li = document.createElement("li");
+    li.draggable = true;
+    li.dataset.index = i;
+    li.innerHTML = `
       <span><input type="checkbox" ${t.done?"checked":""}> ${t.text}</span>
       <button>X</button>
     `;
-    li.querySelector("input").onchange=e=>{
-      const arr=load("tasks",[]);
-      arr[i].done=e.target.checked;
-      save("tasks",arr);
+
+    li.querySelector("input").onchange = e=>{
+      const history = getHistory();
+      const targetArray = i < daily.length ? history[selectedDate].dailyTasks : history[selectedDate].customTasks;
+      const idx = i < daily.length ? i : i - daily.length;
+      targetArray[idx].done = e.target.checked;
+      saveHistory(history);
     };
-    li.querySelector("button").onclick=()=>{
-      const arr=load("tasks",[]);
-      arr.splice(i,1);
-      save("tasks",arr);
+
+    li.querySelector("button").onclick = ()=>{
+      const history = getHistory();
+      if(i < daily.length){
+        history[selectedDate].dailyTasks.splice(i,1);
+      } else {
+        history[selectedDate].customTasks.splice(i-daily.length,1);
+      }
+      saveHistory(history);
       renderTasks();
     };
-    // drag-and-drop for reordering
+
+    // Drag & Drop reordering within current date
     li.addEventListener("dragstart",()=>{ draggedTaskIndex=i; });
     li.addEventListener("dragover",e=>e.preventDefault());
     li.addEventListener("drop",()=>{
-      const arr=load("tasks",[]);
-      const dragged=arr.splice(draggedTaskIndex,1)[0];
-      arr.splice(i,0,dragged);
-      save("tasks",arr);
+      const history = getHistory();
+      const targetArray = i < daily.length ? history[selectedDate].dailyTasks : history[selectedDate].customTasks;
+      const sourceArray = draggedTaskIndex < daily.length ? history[selectedDate].dailyTasks : history[selectedDate].customTasks;
+      const sourceIdx = draggedTaskIndex < daily.length ? draggedTaskIndex : draggedTaskIndex - daily.length;
+      const targetIdx = i < daily.length ? i : i - daily.length;
+      const [moved] = sourceArray.splice(sourceIdx,1);
+      targetArray.splice(targetIdx,0,moved);
+      saveHistory(history);
       renderTasks();
     });
+
     taskList.appendChild(li);
   });
 }
 
-document.getElementById("addTask").onclick=()=>{
-  const input=document.getElementById("taskInput");
+/* ===== ADD CUSTOM TASK ===== */
+document.getElementById("addTask").onclick = ()=>{
+  const input = document.getElementById("taskInput");
   if(!input.value.trim()) return;
-  const arr=load("tasks",[]);
-  arr.push({text:input.value,done:false});
-  save("tasks",arr);
+  ensureDateExists(selectedDate);
+  const history = getHistory();
+  history[selectedDate].customTasks.push({text: input.value, done:false});
+  saveHistory(history);
   input.value="";
   renderTasks();
 };
 
-/* ===== RESET SYSTEM ===== */
-const resetInput=document.getElementById("resetTime");
-resetInput.value=localStorage.getItem("resetTime")||"04:00";
-resetInput.onchange=()=>localStorage.setItem("resetTime",resetInput.value);
+/* ===== DATE PICKER ===== */
+document.getElementById("datePicker").onchange = e=>{
+  selectedDate = e.target.value;
+  ensureDateExists(selectedDate);
+  renderTasks();
+};
 
-document.getElementById("manualReset").onclick=()=>{
-  const arr=load("tasks",[]).map(t=>({...t,done:false}));
-  save("tasks",arr);
+/* ===== RESET SYSTEM ===== */
+const resetInput = document.getElementById("resetTime");
+resetInput.value = localStorage.getItem("resetTime") || "04:00";
+resetInput.onchange = ()=> localStorage.setItem("resetTime", resetInput.value);
+
+document.getElementById("manualReset").onclick = ()=>{
+  ensureDateExists(selectedDate);
+  const history = getHistory();
+  history[selectedDate].dailyTasks.forEach(t=>t.done=false);
+  saveHistory(history);
   renderTasks();
 };
 
 function checkDailyReset(){
-  const time=localStorage.getItem("resetTime");
+  const time = localStorage.getItem("resetTime");
   if(!time) return;
-  const now=new Date();
-  const today=now.toDateString();
-  if(localStorage.getItem("lastReset")===today) return;
-  const [h,m]=time.split(":");
+  const now = new Date();
+  const today = now.toDateString();
+  if(localStorage.getItem("lastReset") === today) return;
+  const [h,m] = time.split(":");
   if(now.getHours()>=h && now.getMinutes()>=m){
-    const arr=load("tasks",[]).map(t=>({...t,done:false}));
-    save("tasks",arr);
+    ensureDateExists(selectedDate);
+    const history = getHistory();
+    history[selectedDate].dailyTasks.forEach(t=>t.done=false);
+    saveHistory(history);
     localStorage.setItem("lastReset",today);
     renderTasks();
   }
 }
 setInterval(checkDailyReset,30000);
 
-/* ===== MEDIA SYSTEM ===== */
-const mediaLayer=document.getElementById("mediaLayer");
-const fileInput=document.getElementById("fileInput");
-let editMode=false;
-let action=null,targetIndex=null,startX,startY,startW,startH,offsetX,offsetY;
-
-function renderMedia(){
-  mediaLayer.innerHTML="";
-  const media=load("media",[]);
-  media.forEach((m,i)=>{
-    const div=document.createElement("div");
-    div.className="media"+(editMode?" edit":"");
-    div.style.left=m.x+"px";
-    div.style.top=m.y+"px";
-    div.style.width=m.w+"px";
-    div.style.height=m.h+"px";
-    div.dataset.index=i;
-    div.innerHTML=`
-      <img src="${m.src}">
-      <button class="deleteBtn">×</button>
-      <div class="resize"></div>
-    `;
-    div.querySelector(".deleteBtn").onclick=()=>{
-      const arr=load("media",[]);
-      arr.splice(i,1);
-      save("media",arr);
-      renderMedia();
-    };
-    mediaLayer.appendChild(div);
-  });
-}
-
-// GLOBAL INTERACTION HANDLER
-mediaLayer.addEventListener("mousedown",e=>{
-  if(!editMode) return;
-  const mediaEl=e.target.closest(".media");
-  if(!mediaEl) return;
-  const index=Number(mediaEl.dataset.index);
-  const rect=mediaEl.getBoundingClientRect();
-  targetIndex=index;
-  if(e.target.classList.contains("resize")){
-    action="resize";
-    startX=e.clientX; startY=e.clientY;
-    startW=rect.width; startH=rect.height;
-  } else {
-    action="drag";
-    offsetX=e.clientX-rect.left;
-    offsetY=e.clientY-rect.top;
-  }
-});
-
-window.addEventListener("mousemove",e=>{
-  if(!action) return;
-  const media=load("media",[]);
-  const item=media[targetIndex];
-  if(action==="drag"){
-    item.x=e.clientX-offsetX;
-    item.y=e.clientY-offsetY;
-  }
-  if(action==="resize"){
-    item.w=Math.max(50,startW+(e.clientX-startX));
-    item.h=Math.max(50,startH+(e.clientY-startY));
-  }
-  save("media",media);
-  renderMedia();
-});
-
-window.addEventListener("mouseup",()=>{ action=null; });
-
-document.getElementById("addMedia").onclick=()=>fileInput.click();
-
-fileInput.onchange=e=>{
-  const files=[...e.target.files];
-  if(!files.length) return;
-  const media=load("media",[]);
-  const offset=media.length;
-  files.forEach((file,i)=>{
-    const reader=new FileReader();
-    reader.onload=ev=>{
-      media.push({src:ev.target.result,x:120+(offset+i)*20,y:120+(offset+i)*20,w:200,h:200});
-      if(i===files.length-1){ save("media",media); renderMedia(); }
-    };
-    reader.readAsDataURL(file);
-  });
-  fileInput.value="";
-};
-
-document.getElementById("toggleEdit").onclick=()=>{ editMode=!editMode; renderMedia(); };
-
 /* ===== INIT ===== */
+ensureDateExists(selectedDate);
 renderTasks();
-renderMedia();
-checkDailyReset();
 </script>
 </body>
 </html>
