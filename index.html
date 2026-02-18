@@ -3,37 +3,103 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Daily Checklist with Background</title>
-
+<title>Checklist with Editable Media</title>
 <style>
 body {
     font-family: Arial, sans-serif;
     margin:0;
     padding:0;
     height:100vh;
+    background:#111;
+    color:white;
     display:flex;
     justify-content:center;
     align-items:flex-start;
-    background:#111;
-    color:white;
-    overflow: hidden;
+    overflow:hidden;
 }
 
-/* Background media container */
-#bgContainer {
-    position: fixed;
+#mediaCanvas {
+    position:fixed;
     top:0; left:0;
-    width:100%; height:100%;
-    z-index: -1;
+    width:100%;
+    height:100%;
+    z-index:0;
+    pointer-events:none;
+}
+
+.media-item {
+    position:absolute;
+    cursor:move;
+    z-index:1;
     display:flex;
-    flex-wrap: wrap;
     justify-content:center;
     align-items:center;
-    background-size: cover;
-    background-position: center;
 }
 
-/* Media thumbnails container */
+.media-item img {
+    display:block;
+    width:100%;
+    height:100%;
+    object-fit:contain;
+    pointer-events:none;
+}
+
+.container {
+    background:#1c1c1ccc;
+    padding:25px;
+    border-radius:12px;
+    width:380px;
+    margin-top:30px;
+    box-shadow:0 0 20px rgba(0,0,0,0.5);
+    z-index:2;
+    position:relative;
+}
+
+/* Tasks */
+.task {
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    margin:8px 0;
+    padding:5px 8px;
+    border-radius:6px;
+    background:#222;
+    cursor: grab;
+}
+
+.task.dragging { opacity:0.5; }
+
+button {
+    background:#333;
+    border:none;
+    color:white;
+    padding:6px 10px;
+    border-radius:6px;
+    cursor:pointer;
+}
+
+button:hover { background:#555; }
+
+input[type="text"], input[type="time"] { width:70%; padding:6px; }
+
+.controls { margin-top:10px; display:flex; gap:8px; }
+
+.small { font-size:13px; color:#aaa; text-align:center; margin-top:10px; }
+
+#addMediaBtn {
+    width:60px;
+    height:60px;
+    border:2px dashed #fff;
+    border-radius:8px;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    font-size:24px;
+    cursor:pointer;
+    color:#fff;
+    user-select:none;
+}
+
 #mediaThumbnails {
     position: fixed;
     bottom:10px;
@@ -41,7 +107,7 @@ body {
     transform:translateX(-50%);
     display:flex;
     gap:10px;
-    z-index: 2;
+    z-index:3;
 }
 
 .media-thumb {
@@ -72,73 +138,11 @@ body {
     border-radius:3px;
     cursor:pointer;
 }
-
-/* Container */
-.container {
-    background:#1c1c1ccc;
-    padding:25px;
-    border-radius:12px;
-    width:380px;
-    margin-top:30px;
-    box-shadow:0 0 20px rgba(0,0,0,0.5);
-}
-
-/* Tasks */
-.task {
-    display:flex;
-    justify-content:space-between;
-    align-items:center;
-    margin:8px 0;
-    padding:5px 8px;
-    border-radius:6px;
-    background:#222;
-    cursor: grab;
-}
-
-.task.dragging {
-    opacity:0.5;
-}
-
-/* Controls */
-button {
-    background:#333;
-    border:none;
-    color:white;
-    padding:6px 10px;
-    border-radius:6px;
-    cursor:pointer;
-}
-
-button:hover { background:#555; }
-
-input[type="text"], input[type="time"] {
-    width:70%;
-    padding:6px;
-}
-
-.controls { margin-top:10px; display:flex; gap:8px; }
-
-.small { font-size:13px; color:#aaa; text-align:center; margin-top:10px; }
-
-#addMediaBtn {
-    width:60px;
-    height:60px;
-    border:2px dashed #fff;
-    border-radius:8px;
-    display:flex;
-    justify-content:center;
-    align-items:center;
-    font-size:24px;
-    cursor:pointer;
-    color:#fff;
-    user-select:none;
-}
 </style>
 </head>
-
 <body>
 
-<div id="bgContainer"></div>
+<div id="mediaCanvas"></div>
 
 <div class="container">
 <h1>Daily Checklist</h1>
@@ -158,6 +162,7 @@ input[type="text"], input[type="time"] {
 
 <div class="controls">
     <button onclick="manualReset()">Reset Now</button>
+    <button id="editModeBtn">Enter Edit Mode</button>
 </div>
 
 <div class="small" id="info"></div>
@@ -171,7 +176,7 @@ input[type="text"], input[type="time"] {
 <input type="file" id="mediaInput" accept="image/*,image/gif" style="display:none" multiple>
 
 <script>
-/* ---------- STORAGE ---------- */
+/* ---------- STORAGE KEYS ---------- */
 const TASK_KEY = "tasks";
 const RESET_TIME_KEY = "resetTime";
 const LAST_RESET_KEY = "lastReset";
@@ -183,18 +188,16 @@ function getTasks(){ return JSON.parse(localStorage.getItem(TASK_KEY)) || [
     {text:"Drink Water", checked:false},
     {text:"Read", checked:false}
 ];}
-
-function saveTasks(tasks){ localStorage.setItem(TASK_KEY, JSON.stringify(tasks));}
+function saveTasks(tasks){ localStorage.setItem(TASK_KEY, JSON.stringify(tasks)); }
 
 /* ---------- RENDER TASKS ---------- */
 const taskListEl = document.getElementById("taskList");
-
 let dragSrcIndex = null;
 
 function render(){
-    taskListEl.innerHTML = "";
+    // Tasks
+    taskListEl.innerHTML="";
     const tasks = getTasks();
-
     tasks.forEach((task,index)=>{
         const div=document.createElement("div");
         div.className="task";
@@ -206,7 +209,7 @@ function render(){
         checkbox.checked=task.checked;
         checkbox.onchange=()=>{tasks[index].checked=checkbox.checked; saveTasks(tasks);}
         label.appendChild(checkbox);
-        label.append(" " + task.text);
+        label.append(" "+task.text);
 
         const delBtn=document.createElement("button");
         delBtn.textContent="✕";
@@ -220,20 +223,13 @@ function render(){
         div.appendChild(delBtn);
         taskListEl.appendChild(div);
 
-        /* Drag & Drop */
+        // Drag & Drop
         div.addEventListener("dragstart",(e)=>{
             dragSrcIndex=index;
             div.classList.add("dragging");
         });
-
-        div.addEventListener("dragend",(e)=>{
-            div.classList.remove("dragging");
-        });
-
-        div.addEventListener("dragover",(e)=>{
-            e.preventDefault();
-        });
-
+        div.addEventListener("dragend",()=>{div.classList.remove("dragging");});
+        div.addEventListener("dragover",(e)=>{e.preventDefault();});
         div.addEventListener("drop",(e)=>{
             e.preventDefault();
             if(dragSrcIndex===null || dragSrcIndex===index) return;
@@ -244,8 +240,8 @@ function render(){
         });
     });
 
-    updateInfo();
     renderMedia();
+    updateInfo();
 }
 
 /* ---------- TASK MANAGEMENT ---------- */
@@ -280,13 +276,10 @@ function checkDailyReset(){
     const now=new Date();
     const minutesNow=now.getHours()*60+now.getMinutes();
     const resetMinutes=getResetMinutes();
-
     const todayReset=new Date();
     todayReset.setHours(0,0,0,0);
     todayReset.setMinutes(resetMinutes);
-
     if(minutesNow<resetMinutes){ todayReset.setDate(todayReset.getDate()-1); }
-
     if(lastReset<todayReset.getTime()){
         manualReset();
         localStorage.setItem(LAST_RESET_KEY,todayReset.getTime());
@@ -311,47 +304,64 @@ function updateInfo(){
 }
 
 /* ---------- MEDIA ---------- */
-const bgContainer=document.getElementById("bgContainer");
+const bgCanvas=document.getElementById("mediaCanvas");
 const mediaInput=document.getElementById("mediaInput");
 const addMediaBtn=document.getElementById("addMediaBtn");
+const editModeBtn=document.getElementById("editModeBtn");
+let editMode=false;
 
 function getMedia(){ return JSON.parse(localStorage.getItem(MEDIA_KEY)) || []; }
 function saveMedia(media){ localStorage.setItem(MEDIA_KEY, JSON.stringify(media)); }
 
 function renderMedia(){
+    bgCanvas.innerHTML="";
     const media=getMedia();
-    bgContainer.innerHTML="";
-    media.forEach((data,index)=>{
-        const img=document.createElement("img");
-        img.src=data;
-        img.style.position="absolute";
-        img.style.width="100%";
-        img.style.height="100%";
-        img.style.objectFit="cover";
-        bgContainer.appendChild(img);
-    });
-
-    const thumbs=document.getElementById("mediaThumbnails");
-    thumbs.querySelectorAll(".media-thumb").forEach(e=>e.remove());
-    media.forEach((data,index)=>{
+    media.forEach((item,index)=>{
         const div=document.createElement("div");
-        div.className="media-thumb";
+        div.className="media-item";
+        div.style.left=item.x+"px";
+        div.style.top=item.y+"px";
+        div.style.width=item.width+"px";
+        div.style.height=item.height+"px";
+
         const img=document.createElement("img");
-        img.src=data;
-        const delBtn=document.createElement("button");
-        delBtn.textContent="✕";
-        delBtn.onclick=()=>{
-            media.splice(index,1);
-            saveMedia(media);
-            render();
-        }
+        img.src=item.src;
         div.appendChild(img);
-        div.appendChild(delBtn);
-        thumbs.appendChild(div);
+
+        bgCanvas.appendChild(div);
+
+        if(editMode){
+            div.style.pointerEvents="auto";
+            div.style.border="2px dashed #fff";
+            makeDraggableResizable(div,index);
+        } else{
+            div.style.pointerEvents="none";
+            div.style.border="none";
+        }
+
+        // Thumbnail
+        const thumbs=document.getElementById("mediaThumbnails");
+        if(!thumbs.querySelector(`[data-index="${index}"]`)){
+            const thumb=document.createElement("div");
+            thumb.className="media-thumb";
+            thumb.dataset.index=index;
+            const timg=document.createElement("img");
+            timg.src=item.src;
+            const delBtn=document.createElement("button");
+            delBtn.textContent="✕";
+            delBtn.onclick=()=>{
+                media.splice(index,1);
+                saveMedia(media);
+                render();
+            }
+            thumb.appendChild(timg);
+            thumb.appendChild(delBtn);
+            thumbs.appendChild(thumb);
+        }
     });
 }
 
-/* Add Media via + button */
+/* ---------- ADD MEDIA ---------- */
 addMediaBtn.addEventListener("click",()=>{ mediaInput.click(); });
 mediaInput.addEventListener("change",(e)=>{
     const files=[...e.target.files];
@@ -359,7 +369,7 @@ mediaInput.addEventListener("change",(e)=>{
         const reader=new FileReader();
         reader.onload=(ev)=>{
             const media=getMedia();
-            media.push(ev.target.result);
+            media.push({src:ev.target.result,x:50,y:50,width:150,height:150});
             saveMedia(media);
             render();
         }
@@ -367,6 +377,64 @@ mediaInput.addEventListener("change",(e)=>{
     });
     mediaInput.value="";
 });
+
+/* ---------- EDIT MODE ---------- */
+editModeBtn.addEventListener("click",()=>{
+    editMode=!editMode;
+    editModeBtn.textContent = editMode?"Exit Edit Mode":"Enter Edit Mode";
+    render();
+});
+
+/* ---------- DRAG/RESIZE ---------- */
+function makeDraggableResizable(el,index){
+    let isDragging=false, isResizing=false;
+    let startX, startY, startW, startH;
+
+    el.addEventListener("mousedown",(e)=>{
+        if(e.offsetX>el.clientWidth-10 && e.offsetY>el.clientHeight-10){
+            isResizing=true;
+            startW=el.offsetWidth; startH=el.offsetHeight;
+        } else{
+            isDragging=true;
+        }
+        startX=e.clientX;
+        startY=e.clientY;
+        e.preventDefault();
+    });
+
+    window.addEventListener("mousemove",(e)=>{
+        if(!isDragging && !isResizing) return;
+        const media=getMedia();
+        if(isDragging){
+            const dx=e.clientX-startX;
+            const dy=e.clientY-startY;
+            el.style.left=media[index].x+dx+"px";
+            el.style.top=media[index].y+dy+"px";
+        } else if(isResizing){
+            const dx=e.clientX-startX;
+            const dy=e.clientY-startY;
+            el.style.width=startW+dx+"px";
+            el.style.height=startH+dy+"px";
+        }
+    });
+
+    window.addEventListener("mouseup",(e)=>{
+        if(isDragging){
+            const media=getMedia();
+            media[index].x=parseInt(el.style.left);
+            media[index].y=parseInt(el.style.top);
+            saveMedia(media);
+        }
+        if(isResizing){
+            const media=getMedia();
+            media[index].width=parseInt(el.style.width);
+            media[index].height=parseInt(el.style.height);
+            saveMedia(media);
+        }
+        isDragging=false;
+        isResizing=false;
+    });
+}
 
 /* ---------- INIT ---------- */
 loadResetTime();
