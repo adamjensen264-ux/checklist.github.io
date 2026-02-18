@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Daily Checklist with Custom Tasks</title>
+<title>Advanced Checklist with Media</title>
 <style>
 body {
   margin:0;
@@ -13,11 +13,13 @@ body {
 }
 
 .container {
-  max-width:700px;
+  max-width:800px;
   margin:40px auto;
   background:#1e1e1e;
   padding:20px;
   border-radius:10px;
+  position:relative;
+  z-index:2;
 }
 
 ul { list-style:none; padding:0; }
@@ -50,33 +52,79 @@ input[type=text], input[type=date], input[type=time] {
   background:#ffb400;
   margin-left:6px;
 }
+
+/* Media layer */
+#mediaLayer{
+  position:fixed;
+  inset:0;
+  z-index:1;
+}
+.media{
+  position:absolute;
+}
+.media img{
+  width:100%;
+  height:100%;
+  object-fit:cover;
+  border-radius:8px;
+  pointer-events:none;
+}
+.deleteBtn{
+  position:absolute;
+  top:-10px;
+  right:-10px;
+  width:22px;
+  height:22px;
+  border-radius:50%;
+  background:red;
+  display:none;
+}
+.resize{
+  width:14px;
+  height:14px;
+  background:white;
+  position:absolute;
+  right:0;
+  bottom:0;
+  cursor:nwse-resize;
+  display:none;
+}
+.edit .deleteBtn,
+.edit .resize{
+  display:block;
+}
 </style>
 </head>
 <body>
 
+<div id="mediaLayer"></div>
+
 <div class="container">
-<h2>Daily Checklist with Custom Tasks</h2>
+<h2>Advanced Checklist with Media</h2>
 
 <label>Select Date:</label>
 <input type="date" id="datePicker"><br><br>
+
+<button id="addTaskButton">Add Task</button>
 
 <h3>Daily Tasks</h3>
 <ul id="dailyList"></ul>
 
 <h3>Custom Tasks</h3>
-<input type="text" id="customTaskInput" placeholder="New custom task">
-<button id="addCustomTask">Add Task</button>
 <ul id="customList"></ul>
 
 <br>
 <label>Daily Reset Time:</label>
 <input type="time" id="resetTime">
 <button id="manualReset">Manual Reset</button>
+<button id="toggleEdit">Toggle Media Edit</button>
+<button id="addMedia">+ Media</button>
+<input type="file" id="fileInput" accept="image/*,image/gif" multiple hidden>
 </div>
 
 <script>
 /* ===== STORAGE HELPERS ===== */
-const load = (key, def) => JSON.parse(localStorage.getItem(key) || JSON.stringify(def));
+const load = (key, def) => JSON.parse(localStorage.getItem(key)||JSON.stringify(def));
 const save = (key, val) => localStorage.setItem(key, JSON.stringify(val));
 
 /* ===== GLOBAL DAILY TASKS ===== */
@@ -89,62 +137,55 @@ let dailyTasksGlobal = load("dailyTasksGlobal", [
 ]);
 
 /* ===== DATE PICKER ===== */
-let selectedDate = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
+let selectedDate = new Date().toISOString().split("T")[0];
 document.getElementById("datePicker").value = selectedDate;
 
-/* ===== CHECKLIST HISTORY ===== */
+/* ===== HISTORY STORAGE ===== */
 function getHistory(){ return load("checklistHistory", {}); }
 function saveHistory(h){ save("checklistHistory", h); }
 function ensureDateExists(date){
   const history = getHistory();
-  if(!history[date]){
-    history[date] = { dailyTasksDone: dailyTasksGlobal.map(()=>false), customTasks: [] };
-    saveHistory(history);
-  }
+  if(!history[date]) history[date] = {dailyTasksDone: dailyTasksGlobal.map(()=>false), customTasks: []};
 }
 
 /* ===== RENDER DAILY TASKS ===== */
-const dailyList = document.getElementById("dailyList");
-let draggedDailyIndex = null;
+const dailyList=document.getElementById("dailyList");
+let draggedDailyIndex=null;
 
 function renderDailyTasks(){
   ensureDateExists(selectedDate);
-  const history = getHistory();
-  const doneArray = history[selectedDate].dailyTasksDone;
-
+  const history=getHistory();
+  const doneArray=history[selectedDate].dailyTasksDone;
   dailyList.innerHTML="";
   dailyTasksGlobal.forEach((t,i)=>{
-    const li = document.createElement("li");
-    li.draggable = true;
-    li.dataset.index = i;
-    li.innerHTML = `
+    const li=document.createElement("li");
+    li.draggable=true;
+    li.dataset.index=i;
+    li.innerHTML=`
       <span><input type="checkbox" ${doneArray[i]?"checked":""}> ${t.text}</span>
       <button class="editBtn">✎</button>
     `;
-    // checkbox toggle
     li.querySelector("input").onchange = e=>{
-      const history = getHistory();
-      history[selectedDate].dailyTasksDone[i] = e.target.checked;
+      const history=getHistory();
+      history[selectedDate].dailyTasksDone[i]=e.target.checked;
       saveHistory(history);
     };
-    // edit text
     li.querySelector(".editBtn").onclick = ()=>{
       const newText = prompt("Edit daily task:", dailyTasksGlobal[i].text);
       if(newText!==null && newText.trim()!==""){
-        dailyTasksGlobal[i].text = newText.trim();
+        dailyTasksGlobal[i].text=newText.trim();
         save("dailyTasksGlobal", dailyTasksGlobal);
         renderDailyTasks();
       }
     };
-    // drag and drop to reorder
     li.addEventListener("dragstart", ()=>{ draggedDailyIndex=i; });
     li.addEventListener("dragover", e=>e.preventDefault());
     li.addEventListener("drop", ()=>{
-      const [moved] = dailyTasksGlobal.splice(draggedDailyIndex,1);
+      const [moved]=dailyTasksGlobal.splice(draggedDailyIndex,1);
       dailyTasksGlobal.splice(i,0,moved);
       save("dailyTasksGlobal", dailyTasksGlobal);
-      const history = getHistory();
-      const doneMoved = history[selectedDate].dailyTasksDone.splice(draggedDailyIndex,1)[0];
+      const history=getHistory();
+      const doneMoved=history[selectedDate].dailyTasksDone.splice(draggedDailyIndex,1)[0];
       history[selectedDate].dailyTasksDone.splice(i,0,doneMoved);
       saveHistory(history);
       renderDailyTasks();
@@ -153,29 +194,28 @@ function renderDailyTasks(){
   });
 }
 
-/* ===== CUSTOM TASKS ===== */
-const customList = document.getElementById("customList");
-let draggedCustomIndex = null;
+/* ===== RENDER CUSTOM TASKS ===== */
+const customList=document.getElementById("customList");
+let draggedCustomIndex=null;
 
 function renderCustomTasks(){
   ensureDateExists(selectedDate);
-  const history = getHistory();
-  const tasks = history[selectedDate].customTasks;
-
+  const history=getHistory();
+  const tasks=history[selectedDate].customTasks;
   customList.innerHTML="";
   tasks.forEach((t,i)=>{
     const li=document.createElement("li");
-    li.draggable = true;
-    li.dataset.index = i;
-    li.innerHTML = `<span><input type="checkbox" ${t.done?"checked":""}> ${t.text}</span>
-                    <button>X</button>`;
+    li.draggable=true;
+    li.dataset.index=i;
+    li.innerHTML=`<span><input type="checkbox" ${t.done?"checked":""}> ${t.text}</span>
+                  <button>X</button>`;
     li.querySelector("input").onchange = e=>{
-      const history = getHistory();
-      history[selectedDate].customTasks[i].done = e.target.checked;
+      const history=getHistory();
+      history[selectedDate].customTasks[i].done=e.target.checked;
       saveHistory(history);
     };
     li.querySelector("button").onclick = ()=>{
-      const history = getHistory();
+      const history=getHistory();
       history[selectedDate].customTasks.splice(i,1);
       saveHistory(history);
       renderCustomTasks();
@@ -183,8 +223,8 @@ function renderCustomTasks(){
     li.addEventListener("dragstart", ()=>{ draggedCustomIndex=i; });
     li.addEventListener("dragover", e=>e.preventDefault());
     li.addEventListener("drop", ()=>{
-      const history = getHistory();
-      const [moved] = history[selectedDate].customTasks.splice(draggedCustomIndex,1);
+      const history=getHistory();
+      const [moved]=history[selectedDate].customTasks.splice(draggedCustomIndex,1);
       history[selectedDate].customTasks.splice(i,0,moved);
       saveHistory(history);
       renderCustomTasks();
@@ -193,18 +233,53 @@ function renderCustomTasks(){
   });
 }
 
-document.getElementById("addCustomTask").onclick = ()=>{
-  const input = document.getElementById("customTaskInput");
-  if(!input.value.trim()) return;
-  ensureDateExists(selectedDate);
-  const history = getHistory();
-  history[selectedDate].customTasks.push({text: input.value.trim(), done:false});
-  saveHistory(history);
-  input.value="";
-  renderCustomTasks();
+/* ===== ADD TASK VIA POPUP ===== */
+document.getElementById("addTaskButton").onclick = ()=>{
+  const win = window.open("", "Add Task", "width=400,height=250");
+  win.document.write(`
+    <p>Task Description:</p>
+    <input id="taskText" type="text" style="width:90%">
+    <p><input type="checkbox" id="dailyTask"> Daily Task (applies to all dates)</p>
+    <p><input type="checkbox" id="dateTask"> Date-Specific Task</p>
+    <p>Date: <input type="date" id="taskDate" value="${selectedDate}" disabled></p>
+    <button id="submitBtn">Add Task</button>
+    <script>
+      const dailyCheckbox = document.getElementById('dailyTask');
+      const dateCheckbox = document.getElementById('dateTask');
+      const taskDate = document.getElementById('taskDate');
+      dailyCheckbox.onchange = ()=>{ if(dailyCheckbox.checked) dateCheckbox.checked=false; taskDate.disabled = !dateCheckbox.checked; };
+      dateCheckbox.onchange = ()=>{ if(dateCheckbox.checked) dailyCheckbox.checked=false; taskDate.disabled = !dateCheckbox.checked; };
+      document.getElementById('submitBtn').onclick = ()=>{
+        const text = document.getElementById('taskText').value.trim();
+        const isDaily = dailyCheckbox.checked;
+        const isDate = dateCheckbox.checked;
+        const date = taskDate.value;
+        if(!text || (!isDaily && !isDate)){ alert('Enter text and choose type'); return; }
+        window.opener.postMessage({text,isDaily,isDate,date},'*');
+        window.close();
+      };
+    <\/script>
+  `);
 };
 
-/* ===== DATE PICKER HANDLER ===== */
+/* ===== HANDLE NEW TASKS FROM POPUP ===== */
+window.addEventListener("message", e=>{
+  const {text,isDaily,isDate,date}=e.data;
+  if(isDaily){
+    dailyTasksGlobal.push({text});
+    save("dailyTasksGlobal", dailyTasksGlobal);
+    renderDailyTasks();
+  }
+  if(isDate){
+    ensureDateExists(date);
+    const history=getHistory();
+    history[date].customTasks.push({text,done:false});
+    saveHistory(history);
+    if(date===selectedDate) renderCustomTasks();
+  }
+});
+
+/* ===== DATE PICKER ===== */
 document.getElementById("datePicker").onchange = e=>{
   selectedDate = e.target.value;
   renderDailyTasks();
@@ -212,29 +287,29 @@ document.getElementById("datePicker").onchange = e=>{
 };
 
 /* ===== RESET SYSTEM ===== */
-const resetInput = document.getElementById("resetTime");
+const resetInput=document.getElementById("resetTime");
 resetInput.value = localStorage.getItem("resetTime") || "04:00";
 resetInput.onchange = ()=> localStorage.setItem("resetTime", resetInput.value);
 
 document.getElementById("manualReset").onclick = ()=>{
   ensureDateExists(selectedDate);
-  const history = getHistory();
-  history[selectedDate].dailyTasksDone = dailyTasksGlobal.map(()=>false);
+  const history=getHistory();
+  history[selectedDate].dailyTasksDone=dailyTasksGlobal.map(()=>false);
   saveHistory(history);
   renderDailyTasks();
 };
 
 function checkDailyReset(){
-  const time = localStorage.getItem("resetTime");
+  const time=localStorage.getItem("resetTime");
   if(!time) return;
-  const now = new Date();
-  const today = now.toDateString();
-  if(localStorage.getItem("lastReset") === today) return;
-  const [h,m] = time.split(":");
+  const now=new Date();
+  const today=now.toDateString();
+  if(localStorage.getItem("lastReset")===today) return;
+  const [h,m]=time.split(":");
   if(now.getHours()>=h && now.getMinutes()>=m){
     ensureDateExists(selectedDate);
-    const history = getHistory();
-    history[selectedDate].dailyTasksDone = dailyTasksGlobal.map(()=>false);
+    const history=getHistory();
+    history[selectedDate].dailyTasksDone=dailyTasksGlobal.map(()=>false);
     saveHistory(history);
     localStorage.setItem("lastReset",today);
     renderDailyTasks();
@@ -242,10 +317,85 @@ function checkDailyReset(){
 }
 setInterval(checkDailyReset,30000);
 
+/* ===== MEDIA LAYER ===== */
+const mediaLayer=document.getElementById("mediaLayer");
+const fileInput=document.getElementById("fileInput");
+let editMode=false;
+let action=null,targetIndex=null,startX,startY,startW,startH,offsetX,offsetY;
+
+function renderMedia(){
+  mediaLayer.innerHTML="";
+  const media=load("media",[]);
+  media.forEach((m,i)=>{
+    const div=document.createElement("div");
+    div.className="media"+(editMode?" edit":"");
+    div.style.left=m.x+"px";
+    div.style.top=m.y+"px";
+    div.style.width=m.w+"px";
+    div.style.height=m.h+"px";
+    div.dataset.index=i;
+    div.innerHTML=`<img src="${m.src}"><button class="deleteBtn">×</button><div class="resize"></div>`;
+    div.querySelector(".deleteBtn").onclick=()=>{
+      const arr=load("media",[]);
+      arr.splice(i,1);
+      save("media",arr);
+      renderMedia();
+    };
+    mediaLayer.appendChild(div);
+  });
+}
+
+mediaLayer.addEventListener("mousedown",e=>{
+  if(!editMode) return;
+  const mediaEl=e.target.closest(".media");
+  if(!mediaEl) return;
+  const index=Number(mediaEl.dataset.index);
+  const rect=mediaEl.getBoundingClientRect();
+  targetIndex=index;
+  if(e.target.classList.contains("resize")){
+    action="resize";
+    startX=e.clientX; startY=e.clientY;
+    startW=rect.width; startH=rect.height;
+  } else {
+    action="drag";
+    offsetX=e.clientX-rect.left;
+    offsetY=e.clientY-rect.top;
+  }
+});
+window.addEventListener("mousemove",e=>{
+  if(!action) return;
+  const media=load("media",[]);
+  const item=media[targetIndex];
+  if(action==="drag"){ item.x=e.clientX-offsetX; item.y=e.clientY-offsetY; }
+  if(action==="resize"){ item.w=Math.max(50,startW+(e.clientX-startX)); item.h=Math.max(50,startH+(e.clientY-startY)); }
+  save("media",media);
+  renderMedia();
+});
+window.addEventListener("mouseup",()=>{ action=null; });
+
+document.getElementById("addMedia").onclick=()=>fileInput.click();
+fileInput.onchange=e=>{
+  const files=[...e.target.files]; if(!files.length) return;
+  const media=load("media",[]);
+  const offset=media.length;
+  files.forEach((file,i)=>{
+    const reader=new FileReader();
+    reader.onload=ev=>{
+      media.push({src:ev.target.result,x:120+(offset+i)*20,y:120+(offset+i)*20,w:200,h:200});
+      if(i===files.length-1){ save("media",media); renderMedia(); }
+    };
+    reader.readAsDataURL(file);
+  });
+  fileInput.value="";
+};
+document.getElementById("toggleEdit").onclick=()=>{ editMode=!editMode; renderMedia(); };
+
 /* ===== INIT ===== */
 ensureDateExists(selectedDate);
 renderDailyTasks();
 renderCustomTasks();
+renderMedia();
+checkDailyReset();
 </script>
 </body>
 </html>
