@@ -98,45 +98,11 @@ input[type="text"], input[type="time"] { width:70%; padding:6px; }
     cursor:pointer;
     color:#fff;
     user-select:none;
-}
-
-#mediaThumbnails {
-    position: fixed;
+    position:fixed;
     bottom:10px;
     left:50%;
     transform:translateX(-50%);
-    display:flex;
-    gap:10px;
     z-index:3;
-}
-
-.media-thumb {
-    position: relative;
-    width:60px;
-    height:60px;
-    overflow:hidden;
-    border:2px solid #fff;
-    border-radius:8px;
-    cursor: pointer;
-}
-
-.media-thumb img {
-    width:100%;
-    height:100%;
-    object-fit:cover;
-}
-
-.media-thumb button {
-    position:absolute;
-    top:2px;
-    right:2px;
-    background:red;
-    border:none;
-    color:white;
-    font-size:12px;
-    padding:0 4px;
-    border-radius:3px;
-    cursor:pointer;
 }
 </style>
 </head>
@@ -168,11 +134,8 @@ input[type="text"], input[type="time"] { width:70%; padding:6px; }
 <div class="small" id="info"></div>
 </div>
 
-<!-- Media Thumbnails -->
-<div id="mediaThumbnails">
-    <div id="addMediaBtn">+</div>
-</div>
-
+<!-- Single Media + Button -->
+<div id="addMediaBtn">+</div>
 <input type="file" id="mediaInput" accept="image/*,image/gif" style="display:none" multiple>
 
 <script>
@@ -338,26 +301,6 @@ function renderMedia(){
             div.style.pointerEvents="none";
             div.style.border="none";
         }
-
-        // Thumbnail
-        const thumbs=document.getElementById("mediaThumbnails");
-        if(!thumbs.querySelector(`[data-index="${index}"]`)){
-            const thumb=document.createElement("div");
-            thumb.className="media-thumb";
-            thumb.dataset.index=index;
-            const timg=document.createElement("img");
-            timg.src=item.src;
-            const delBtn=document.createElement("button");
-            delBtn.textContent="✕";
-            delBtn.onclick=()=>{
-                media.splice(index,1);
-                saveMedia(media);
-                render();
-            }
-            thumb.appendChild(timg);
-            thumb.appendChild(delBtn);
-            thumbs.appendChild(thumb);
-        }
     });
 }
 
@@ -397,8 +340,7 @@ function makeDraggableResizable(el,index){
         } else{
             isDragging=true;
         }
-        startX=e.clientX;
-        startY=e.clientY;
+        startX=e.clientX; startY=e.clientY;
         e.preventDefault();
     });
 
