@@ -1,43 +1,43 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Daily Checklist</title>
-
+<title>Daily Checklist2</title>
 <style>
 body{
-  font-family:Arial;
+  margin:0;
+  font-family:Arial, Helvetica, sans-serif;
   background:#111;
   color:white;
   text-align:center;
-  margin:0;
 }
 
 .container{
   position:relative;
   z-index:2;
-  max-width:600px;
-  margin:auto;
-  padding:20px;
+  max-width:650px;
+  margin:40px auto;
   background:#1e1e1e;
+  padding:20px;
   border-radius:10px;
 }
 
-ul{list-style:none;padding:0}
+ul{list-style:none;padding:0;}
+
 li{
-  display:flex;
-  justify-content:space-between;
-  align-items:center;
   background:#2a2a2a;
   margin:6px 0;
   padding:8px;
   border-radius:6px;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
   cursor:grab;
 }
 
 button{
   padding:6px 10px;
-  margin:5px;
+  margin:4px;
   border:none;
   border-radius:6px;
   background:#6b5cff;
@@ -45,44 +45,39 @@ button{
   cursor:pointer;
 }
 
-input[type=text]{
-  padding:6px;
-  width:70%;
-}
+input[type=text]{padding:6px;width:70%;}
 
-/* MEDIA AREA */
+/* MEDIA LAYER */
 #mediaLayer{
   position:fixed;
   inset:0;
   z-index:1;
-  pointer-events:none;
 }
 
-.mediaItem{
+.media{
   position:absolute;
-  pointer-events:auto;
 }
 
-.mediaItem img{
+.media img{
   width:100%;
   height:100%;
   object-fit:cover;
   border-radius:8px;
+  pointer-events:none;
 }
 
-.deleteMedia{
+.deleteBtn{
   position:absolute;
   top:-10px;
   right:-10px;
-  background:red;
-  border-radius:50%;
   width:22px;
   height:22px;
+  border-radius:50%;
+  background:red;
   display:none;
-  font-size:14px;
 }
 
-.resizeHandle{
+.resize{
   width:14px;
   height:14px;
   background:white;
@@ -93,13 +88,12 @@ input[type=text]{
   display:none;
 }
 
-.editing .deleteMedia,
-.editing .resizeHandle{
+.edit .deleteBtn,
+.edit .resize{
   display:block;
 }
 </style>
 </head>
-
 <body>
 
 <div id="mediaLayer"></div>
@@ -108,280 +102,198 @@ input[type=text]{
 <h2>Daily Checklist</h2>
 
 <input id="taskInput" placeholder="New task">
-<button id="addTaskBtn">Add Task</button>
+<button id="addTask">Add Task</button>
 
 <ul id="taskList"></ul>
 
-<div>
+<br>
+
 Reset Time:
 <input type="time" id="resetTime">
-<button id="resetBtn">Manual Reset</button>
-</div>
+<button id="manualReset">Manual Reset</button>
 
 <hr>
 
-<button id="editMediaBtn">Edit Media</button>
-<button id="addMediaBtn">+ Media</button>
-<input type="file" id="mediaInput" accept="image/*,image/gif" multiple hidden>
-
+<button id="toggleEdit">Edit Media</button>
+<button id="addMedia">+ Media</button>
+<input type="file" id="fileInput" accept="image/*,image/gif" multiple hidden>
 </div>
 
 <script>
-/* ================= STORAGE ================= */
+/* ===== STORAGE HELPERS ===== */
+const load=(k,d)=>JSON.parse(localStorage.getItem(k)||JSON.stringify(d));
+const save=(k,v)=>localStorage.setItem(k,JSON.stringify(v));
 
-const getTasks=()=>JSON.parse(localStorage.getItem("tasks")||"[]");
-const saveTasks=t=>localStorage.setItem("tasks",JSON.stringify(t));
-
-const getMedia=()=>JSON.parse(localStorage.getItem("media")||"[]");
-const saveMedia=m=>localStorage.setItem("media",JSON.stringify(m));
-
-/* ================= TASKS ================= */
-
-const list=document.getElementById("taskList");
+/* ===== TASK SYSTEM ===== */
+const taskList=document.getElementById("taskList");
+let draggedTaskIndex=null;
 
 function renderTasks(){
-  list.innerHTML="";
-  const tasks=getTasks();
-
+  const tasks=load("tasks",[]);
+  taskList.innerHTML="";
   tasks.forEach((t,i)=>{
     const li=document.createElement("li");
     li.draggable=true;
     li.dataset.index=i;
-
     li.innerHTML=`
-      <span>
-        <input type="checkbox" ${t.done?"checked":""}>
-        ${t.text}
-      </span>
-      <button class="deleteTask">X</button>
+      <span><input type="checkbox" ${t.done?"checked":""}> ${t.text}</span>
+      <button>X</button>
     `;
-    list.appendChild(li);
+    li.querySelector("input").onchange=e=>{
+      const arr=load("tasks",[]);
+      arr[i].done=e.target.checked;
+      save("tasks",arr);
+    };
+    li.querySelector("button").onclick=()=>{
+      const arr=load("tasks",[]);
+      arr.splice(i,1);
+      save("tasks",arr);
+      renderTasks();
+    };
+    // drag-and-drop for reordering
+    li.addEventListener("dragstart",()=>{ draggedTaskIndex=i; });
+    li.addEventListener("dragover",e=>e.preventDefault());
+    li.addEventListener("drop",()=>{
+      const arr=load("tasks",[]);
+      const dragged=arr.splice(draggedTaskIndex,1)[0];
+      arr.splice(i,0,dragged);
+      save("tasks",arr);
+      renderTasks();
+    });
+    taskList.appendChild(li);
   });
 }
 
-document.getElementById("addTaskBtn").onclick=()=>{
+document.getElementById("addTask").onclick=()=>{
   const input=document.getElementById("taskInput");
   if(!input.value.trim()) return;
-  const tasks=getTasks();
-  tasks.push({text:input.value,done:false});
-  saveTasks(tasks);
+  const arr=load("tasks",[]);
+  arr.push({text:input.value,done:false});
+  save("tasks",arr);
   input.value="";
   renderTasks();
 };
 
-list.addEventListener("click",e=>{
-  const li=e.target.closest("li");
-  if(!li) return;
-  const idx=li.dataset.index;
-  const tasks=getTasks();
-
-  if(e.target.type==="checkbox"){
-    tasks[idx].done=e.target.checked;
-  }
-
-  if(e.target.classList.contains("deleteTask")){
-    tasks.splice(idx,1);
-  }
-
-  saveTasks(tasks);
-  renderTasks();
-});
-
-/* DRAG SORT */
-let dragIndex=null;
-
-list.addEventListener("dragstart",e=>{
-  dragIndex=e.target.dataset.index;
-});
-
-list.addEventListener("dragover",e=>e.preventDefault());
-
-list.addEventListener("drop",e=>{
-  const target=e.target.closest("li");
-  if(!target) return;
-
-  const tasks=getTasks();
-  const moved=tasks.splice(dragIndex,1)[0];
-  tasks.splice(target.dataset.index,0,moved);
-
-  saveTasks(tasks);
-  renderTasks();
-});
-
-/* ================= RESET ================= */
-
-document.getElementById("resetBtn").onclick=()=>{
-  const tasks=getTasks().map(t=>({...t,done:false}));
-  saveTasks(tasks);
-  renderTasks();
-};
-
+/* ===== RESET SYSTEM ===== */
 const resetInput=document.getElementById("resetTime");
 resetInput.value=localStorage.getItem("resetTime")||"04:00";
+resetInput.onchange=()=>localStorage.setItem("resetTime",resetInput.value);
 
-resetInput.onchange=()=>{
-  localStorage.setItem("resetTime",resetInput.value);
+document.getElementById("manualReset").onclick=()=>{
+  const arr=load("tasks",[]).map(t=>({...t,done:false}));
+  save("tasks",arr);
+  renderTasks();
 };
 
 function checkDailyReset(){
   const time=localStorage.getItem("resetTime");
   if(!time) return;
-
   const now=new Date();
   const today=now.toDateString();
-
   if(localStorage.getItem("lastReset")===today) return;
-
   const [h,m]=time.split(":");
   if(now.getHours()>=h && now.getMinutes()>=m){
-    const tasks=getTasks().map(t=>({...t,done:false}));
-    saveTasks(tasks);
+    const arr=load("tasks",[]).map(t=>({...t,done:false}));
+    save("tasks",arr);
     localStorage.setItem("lastReset",today);
     renderTasks();
   }
 }
-
 setInterval(checkDailyReset,30000);
 
-/* ================= MEDIA ================= */
-
+/* ===== MEDIA SYSTEM ===== */
 const mediaLayer=document.getElementById("mediaLayer");
-const fileInput=document.getElementById("mediaInput");
+const fileInput=document.getElementById("fileInput");
 let editMode=false;
+let action=null,targetIndex=null,startX,startY,startW,startH,offsetX,offsetY;
 
 function renderMedia(){
   mediaLayer.innerHTML="";
-  const media=getMedia();
-
+  const media=load("media",[]);
   media.forEach((m,i)=>{
     const div=document.createElement("div");
-    div.className="mediaItem";
-    if(editMode) div.classList.add("editing");
-
+    div.className="media"+(editMode?" edit":"");
     div.style.left=m.x+"px";
     div.style.top=m.y+"px";
     div.style.width=m.w+"px";
     div.style.height=m.h+"px";
-
+    div.dataset.index=i;
     div.innerHTML=`
       <img src="${m.src}">
-      <button class="deleteMedia">×</button>
-      <div class="resizeHandle"></div>
+      <button class="deleteBtn">×</button>
+      <div class="resize"></div>
     `;
-
-    /* delete */
-    div.querySelector(".deleteMedia").onclick=()=>{
-      const arr=getMedia();
+    div.querySelector(".deleteBtn").onclick=()=>{
+      const arr=load("media",[]);
       arr.splice(i,1);
-      saveMedia(arr);
+      save("media",arr);
       renderMedia();
     };
-
-    /* drag move */
-    let moving=false,ox,oy;
-
-    div.onmousedown=e=>{
-      if(!editMode || e.target.className==="resizeHandle") return;
-      moving=true;
-      ox=e.clientX-div.offsetLeft;
-      oy=e.clientY-div.offsetTop;
-    };
-
-    document.onmousemove=e=>{
-      if(!moving) return;
-      div.style.left=e.clientX-ox+"px";
-      div.style.top=e.clientY-oy+"px";
-    };
-
-    document.onmouseup=()=>{
-      if(!moving) return;
-      moving=false;
-      const arr=getMedia();
-      arr[i].x=div.offsetLeft;
-      arr[i].y=div.offsetTop;
-      saveMedia(arr);
-    };
-
-    /* resize */
-    const handle=div.querySelector(".resizeHandle");
-    let resizing=false,sx,sy,sw,sh;
-
-    handle.onmousedown=e=>{
-      e.stopPropagation();
-      resizing=true;
-      sx=e.clientX;
-      sy=e.clientY;
-      sw=div.offsetWidth;
-      sh=div.offsetHeight;
-    };
-
-    document.onmousemove=e=>{
-      if(!resizing) return;
-      div.style.width=sw+(e.clientX-sx)+"px";
-      div.style.height=sh+(e.clientY-sy)+"px";
-    };
-
-    document.onmouseup=()=>{
-      if(!resizing) return;
-      resizing=false;
-      const arr=getMedia();
-      arr[i].w=div.offsetWidth;
-      arr[i].h=div.offsetHeight;
-      saveMedia(arr);
-    };
-
     mediaLayer.appendChild(div);
   });
 }
 
-/* ADD MEDIA (FIXED MULTI-UPLOAD) */
-document.getElementById("addMediaBtn").onclick=()=>{
-  fileInput.click();
-};
+// GLOBAL INTERACTION HANDLER
+mediaLayer.addEventListener("mousedown",e=>{
+  if(!editMode) return;
+  const mediaEl=e.target.closest(".media");
+  if(!mediaEl) return;
+  const index=Number(mediaEl.dataset.index);
+  const rect=mediaEl.getBoundingClientRect();
+  targetIndex=index;
+  if(e.target.classList.contains("resize")){
+    action="resize";
+    startX=e.clientX; startY=e.clientY;
+    startW=rect.width; startH=rect.height;
+  } else {
+    action="drag";
+    offsetX=e.clientX-rect.left;
+    offsetY=e.clientY-rect.top;
+  }
+});
 
-fileInput.addEventListener("change",e=>{
+window.addEventListener("mousemove",e=>{
+  if(!action) return;
+  const media=load("media",[]);
+  const item=media[targetIndex];
+  if(action==="drag"){
+    item.x=e.clientX-offsetX;
+    item.y=e.clientY-offsetY;
+  }
+  if(action==="resize"){
+    item.w=Math.max(50,startW+(e.clientX-startX));
+    item.h=Math.max(50,startH+(e.clientY-startY));
+  }
+  save("media",media);
+  renderMedia();
+});
+
+window.addEventListener("mouseup",()=>{ action=null; });
+
+document.getElementById("addMedia").onclick=()=>fileInput.click();
+
+fileInput.onchange=e=>{
   const files=[...e.target.files];
   if(!files.length) return;
-
-  const media=getMedia();
-  let loaded=0;
-
-  files.forEach(file=>{
+  const media=load("media",[]);
+  const offset=media.length;
+  files.forEach((file,i)=>{
     const reader=new FileReader();
     reader.onload=ev=>{
-      media.push({
-        src:ev.target.result,
-        x:100+loaded*20,
-        y:100+loaded*20,
-        w:200,
-        h:200
-      });
-
-      loaded++;
-      if(loaded===files.length){
-        saveMedia(media);
-        renderMedia();
-      }
+      media.push({src:ev.target.result,x:120+(offset+i)*20,y:120+(offset+i)*20,w:200,h:200});
+      if(i===files.length-1){ save("media",media); renderMedia(); }
     };
     reader.readAsDataURL(file);
   });
-
-  /* CRITICAL FIX */
   fileInput.value="";
-});
-
-/* EDIT MODE */
-document.getElementById("editMediaBtn").onclick=()=>{
-  editMode=!editMode;
-  renderMedia();
 };
 
-/* ================= INIT ================= */
+document.getElementById("toggleEdit").onclick=()=>{ editMode=!editMode; renderMedia(); };
 
+/* ===== INIT ===== */
 renderTasks();
 renderMedia();
 checkDailyReset();
 </script>
-
 </body>
 </html>
