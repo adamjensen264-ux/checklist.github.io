@@ -330,26 +330,28 @@ function renderMedia(){
 }
 
 /* ---------- ADD MEDIA ---------- */
-addMediaBtn.addEventListener("click",()=>{ mediaInput.click(); });
-mediaInput.addEventListener("change",(e)=>{
-    const files=[...e.target.files];
-    const media=getMedia();
-    files.forEach(file=>{
-        const reader=new FileReader();
-        reader.onload=(ev)=>{
-            media.push({src:ev.target.result,x:50,y:50,width:150,height:150});
+addMediaBtn.addEventListener("click", () => { mediaInput.click(); });
+
+mediaInput.addEventListener("change", (e) => {
+    const files = [...e.target.files];
+    const media = getMedia(); // Get existing media
+    files.forEach(file => {
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+            media.push({ src: ev.target.result, x: 50, y: 50, width: 150, height: 150 });
             saveMedia(media);
             render();
-        }
+        };
         reader.readAsDataURL(file);
     });
-    mediaInput.value="";
+    // ⚡ Reset input value to allow multiple adds of same files
+    mediaInput.value = "";
 });
 
 /* ---------- EDIT MODE ---------- */
-editModeBtn.addEventListener("click",()=>{
-    editMode=!editMode;
-    editModeBtn.textContent = editMode?"Exit Edit Mode":"Enter Edit Mode";
+editModeBtn.addEventListener("click", () => {
+    editMode = !editMode;
+    editModeBtn.textContent = editMode ? "Exit Edit Mode" : "Enter Edit Mode";
     render();
 });
 
