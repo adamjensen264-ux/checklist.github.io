@@ -6,135 +6,231 @@
 <title>Daily Checklist</title>
 
 <style>
-    body {
-        font-family: Arial, sans-serif;
-        background: #111;
-        color: white;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        height: 100vh;
-    }
+body {
+    font-family: Arial, sans-serif;
+    background:#111;
+    color:white;
+    display:flex;
+    justify-content:center;
+    padding-top:40px;
+}
 
-    .container {
-        background: #1c1c1c;
-        padding: 25px;
-        border-radius: 10px;
-        width: 350px;
-        box-shadow: 0 0 15px rgba(0,0,0,0.5);
-    }
+.container {
+    background:#1c1c1c;
+    padding:25px;
+    border-radius:12px;
+    width:380px;
+}
 
-    h1 {
-        text-align: center;
-    }
+h1 { text-align:center; }
 
-    label {
-        display: block;
-        margin: 10px 0;
-        font-size: 18px;
-        cursor: pointer;
-    }
+.task {
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    margin:8px 0;
+}
 
-    input[type="checkbox"] {
-        margin-right: 10px;
-        transform: scale(1.2);
-    }
+button {
+    background:#333;
+    border:none;
+    color:white;
+    padding:6px 10px;
+    border-radius:6px;
+    cursor:pointer;
+}
 
-    .time {
-        text-align: center;
-        font-size: 14px;
-        color: #aaa;
-        margin-top: 10px;
-    }
+button:hover { background:#555; }
+
+input[type="text"] {
+    width:70%;
+    padding:6px;
+}
+
+.controls {
+    margin-top:15px;
+    display:flex;
+    gap:8px;
+}
+
+.small {
+    font-size:13px;
+    color:#aaa;
+    text-align:center;
+    margin-top:10px;
+}
 </style>
 </head>
 
 <body>
 
 <div class="container">
-    <h1>Daily Checklist</h1>
+<h1>Daily Checklist</h1>
 
-    <label><input type="checkbox" data-id="1"> Workout</label>
-    <label><input type="checkbox" data-id="2"> Drink Water</label>
-    <label><input type="checkbox" data-id="3"> Read</label>
-    <label><input type="checkbox" data-id="4"> Code Practice</label>
+<div id="taskList"></div>
 
-    <div class="time" id="resetInfo"></div>
+<div class="controls">
+    <input id="newTask" type="text" placeholder="New task...">
+    <button onclick="addTask()">Add</button>
+</div>
+
+<hr>
+
+<div>
+    Reset Time:
+    <input type="time" id="resetTime">
+</div>
+
+<div class="controls">
+    <button onclick="manualReset()">Reset Now</button>
+</div>
+
+<div class="small" id="info"></div>
+
 </div>
 
 <script>
-/*
-    ===== SETTINGS =====
-    Set your daily reset time here (24-hour format)
-*/
-const RESET_HOUR = 4;   // 4 AM
-const RESET_MINUTE = 0;
+const TASK_KEY = "tasks";
+const RESET_TIME_KEY = "resetTime";
+const LAST_RESET_KEY = "lastReset";
 
-/* ==================== */
+/* ---------- STORAGE ---------- */
 
-const checkboxes = document.querySelectorAll("input[type=checkbox]");
-const STORAGE_KEY = "dailyChecklist";
-
-/* Load saved state */
-function loadChecklist() {
-    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY)) || {};
-    checkboxes.forEach(cb => {
-        cb.checked = saved[cb.dataset.id] || false;
-    });
+function getTasks() {
+    return JSON.parse(localStorage.getItem(TASK_KEY)) || [
+        {text:"Workout", checked:false},
+        {text:"Drink Water", checked:false},
+        {text:"Read", checked:false}
+    ];
 }
 
-/* Save state */
-function saveChecklist() {
-    const state = {};
-    checkboxes.forEach(cb => {
-        state[cb.dataset.id] = cb.checked;
-    });
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+function saveTasks(tasks){
+    localStorage.setItem(TASK_KEY, JSON.stringify(tasks));
 }
 
-/* Calculate today's reset timestamp */
-function getTodayResetTime() {
+/* ---------- RENDER ---------- */
+
+function render() {
+    const list = document.getElementById("taskList");
+    list.innerHTML = "";
+
+    const tasks = getTasks();
+
+    tasks.forEach((task, index) => {
+
+        const div = document.createElement("div");
+        div.className = "task";
+
+        const label = document.createElement("label");
+
+        const checkbox = document.createElement("input");
+        checkbox.type="checkbox";
+        checkbox.checked = task.checked;
+
+        checkbox.onchange = () => {
+            tasks[index].checked = checkbox.checked;
+            saveTasks(tasks);
+        };
+
+        label.appendChild(checkbox);
+        label.append(" " + task.text);
+
+        const delBtn = document.createElement("button");
+        delBtn.textContent="✕";
+        delBtn.onclick = () => {
+            tasks.splice(index,1);
+            saveTasks(tasks);
+            render();
+        };
+
+        div.appendChild(label);
+        div.appendChild(delBtn);
+        list.appendChild(div);
+    });
+
+    updateInfo();
+}
+
+/* ---------- TASK MANAGEMENT ---------- */
+
+function addTask(){
+    const input = document.getElementById("newTask");
+    const text = input.value.trim();
+    if(!text) return;
+
+    const tasks = getTasks();
+    tasks.push({text, checked:false});
+    saveTasks(tasks);
+
+    input.value="";
+    render();
+}
+
+/* ---------- RESET ---------- */
+
+function manualReset(){
+    const tasks = getTasks();
+    tasks.forEach(t => t.checked=false);
+    saveTasks(tasks);
+
+    localStorage.setItem(LAST_RESET_KEY, Date.now());
+    render();
+}
+
+function getResetMinutes(){
+    const value = localStorage.getItem(RESET_TIME_KEY) || "04:00";
+    const [h,m] = value.split(":").map(Number);
+    return h*60+m;
+}
+
+function checkDailyReset(){
+    const lastReset = Number(localStorage.getItem(LAST_RESET_KEY)||0);
+
     const now = new Date();
-    const reset = new Date();
+    const minutesNow = now.getHours()*60 + now.getMinutes();
+    const resetMinutes = getResetMinutes();
 
-    reset.setHours(RESET_HOUR, RESET_MINUTE, 0, 0);
+    const todayReset = new Date();
+    todayReset.setHours(0,0,0,0);
+    todayReset.setMinutes(resetMinutes);
 
-    // If current time is before reset time,
-    // use yesterday's reset as last reset
-    if (now < reset) {
-        reset.setDate(reset.getDate() - 1);
+    if(minutesNow < resetMinutes){
+        todayReset.setDate(todayReset.getDate()-1);
     }
 
-    return reset.getTime();
-}
-
-/* Reset checklist if needed */
-function checkForReset() {
-    const lastReset = localStorage.getItem("lastReset");
-    const todayReset = getTodayResetTime();
-
-    if (!lastReset || Number(lastReset) < todayReset) {
-        checkboxes.forEach(cb => cb.checked = false);
-        saveChecklist();
-        localStorage.setItem("lastReset", todayReset);
+    if(lastReset < todayReset.getTime()){
+        manualReset();
+        localStorage.setItem(LAST_RESET_KEY, todayReset.getTime());
     }
 }
 
-/* Show reset info */
-function updateResetText() {
-    document.getElementById("resetInfo").textContent =
-        `Resets daily at ${String(RESET_HOUR).padStart(2,"0")}:${String(RESET_MINUTE).padStart(2,"0")}`;
+/* ---------- RESET TIME UI ---------- */
+
+const resetInput = document.getElementById("resetTime");
+
+function loadResetTime(){
+    const saved = localStorage.getItem(RESET_TIME_KEY) || "04:00";
+    resetInput.value = saved;
 }
 
-/* Event listeners */
-checkboxes.forEach(cb =>
-    cb.addEventListener("change", saveChecklist)
-);
+resetInput.addEventListener("change", ()=>{
+    localStorage.setItem(RESET_TIME_KEY, resetInput.value);
+    updateInfo();
+});
 
-/* Initialize */
-checkForReset();
-loadChecklist();
-updateResetText();
+/* ---------- INFO ---------- */
+
+function updateInfo(){
+    const time = localStorage.getItem(RESET_TIME_KEY) || "04:00";
+    document.getElementById("info").textContent =
+        `Checklist resets daily at ${time}`;
+}
+
+/* ---------- INIT ---------- */
+
+loadResetTime();
+checkDailyReset();
+render();
 
 </script>
 
