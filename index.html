@@ -102,86 +102,123 @@ resetInput.addEventListener("change",()=>{ localStorage.setItem(RESET_TIME_KEY,r
 function updateInfo(){ document.getElementById("info").textContent=`Checklist resets daily at ${localStorage.getItem(RESET_TIME_KEY)||"04:00"}`; }
 
 /* MEDIA */
-const bgCanvas=document.getElementById("mediaCanvas");
-const mediaInput=document.getElementById("mediaInput");
-const addMediaBtn=document.getElementById("addMediaBtn");
-const editModeBtn=document.getElementById("editModeBtn");
-let editMode=false;
-function getMedia(){return JSON.parse(localStorage.getItem(MEDIA_KEY))||[];}
-function saveMedia(m){localStorage.setItem(MEDIA_KEY,JSON.stringify(m));}
+<script>
+/* =============================
+   INDEXED DB SETUP
+============================= */
 
-function renderMedia(){
-    bgCanvas.innerHTML="";
-    const media=getMedia();
-    media.forEach((item,index)=>{
-        const div=document.createElement("div");
-        div.className="media-item"; div.style.left=item.x+"px"; div.style.top=item.y+"px"; div.style.width=item.width+"px"; div.style.height=item.height+"px";
-        const img=document.createElement("img"); img.src=item.src; div.appendChild(img);
+let db;
 
-        const delBtn=document.createElement("button"); delBtn.textContent="✕"; delBtn.className="deleteBtn";
-        delBtn.onclick=()=>{ const m=getMedia(); m.splice(index,1); saveMedia(m); render(); };
-        if(editMode) delBtn.style.display="block";
-        div.appendChild(delBtn);
+const request = indexedDB.open("ChecklistMediaDB", 1);
 
-        bgCanvas.appendChild(div);
-        if(editMode){ div.style.pointerEvents="auto"; div.style.border="2px dashed #fff"; makeDraggableResizable(div,index); } 
-        else{ div.style.pointerEvents="none"; div.style.border="none"; }
+request.onupgradeneeded = e => {
+    db = e.target.result;
+    db.createObjectStore("media", { keyPath: "id", autoIncrement: true });
+};
+
+request.onsuccess = e => {
+    db = e.target.result;
+    renderMedia();
+};
+
+function addMediaToDB(file, callback) {
+    const tx = db.transaction("media", "readwrite");
+    const store = tx.objectStore("media");
+
+    store.add({
+        file: file,
+        x: 50,
+        y: 50,
+        width: 150,
+        height: 150
     });
+
+    tx.oncomplete = callback;
 }
 
-/* ADD MEDIA FIXED */
-addMediaBtn.addEventListener("click",()=>{
-    mediaInput.value=""; // reset before opening dialog
+function getAllMedia(callback) {
+    const tx = db.transaction("media", "readonly");
+    const store = tx.objectStore("media");
+    const req = store.getAll();
+
+    req.onsuccess = () => callback(req.result);
+}
+
+function deleteMedia(id) {
+    const tx = db.transaction("media", "readwrite");
+    tx.objectStore("media").delete(id);
+    tx.oncomplete = renderMedia;
+}
+
+/* =============================
+   ADD MEDIA
+============================= */
+
+const mediaInput = document.getElementById("mediaInput");
+const addMediaBtn = document.getElementById("addMediaBtn");
+const bgCanvas = document.getElementById("mediaCanvas");
+
+addMediaBtn.onclick = () => {
+    mediaInput.value = "";
     mediaInput.click();
-});
+};
 
-mediaInput.addEventListener("change",(e)=>{
-    const files=Array.from(e.target.files);
-    const media=getMedia();
-    let remaining=files.length;
+mediaInput.onchange = e => {
+    const files = [...e.target.files];
 
-    files.forEach(file=>{
-        const reader=new FileReader();
-        reader.onload=(ev)=>{
-            media.push({src:ev.target.result,x:50,y:50,width:150,height:150});
+    let remaining = files.length;
+
+    files.forEach(file => {
+        addMediaToDB(file, () => {
             remaining--;
-            if(remaining===0){ saveMedia(media); render(); }
-        };
-        reader.readAsDataURL(file);
+            if (remaining === 0) renderMedia();
+        });
     });
-});
+};
 
-/* EDIT MODE */
-editModeBtn.addEventListener("click",()=>{
-    editMode=!editMode;
-    editModeBtn.textContent=editMode?"Exit Edit Mode":"Enter Edit Mode";
-    render();
-});
+/* =============================
+   RENDER MEDIA
+============================= */
 
-/* DRAG/RESIZE */
-function makeDraggableResizable(el,index){
-    let dragging=false,resizing=false,startX,startY,startW,startH;
-    el.addEventListener("mousedown",(e)=>{
-        if(e.offsetX>el.clientWidth-10 && e.offsetY>el.clientHeight-10){ resizing=true; startW=el.offsetWidth; startH=el.offsetHeight; }
-        else dragging=true;
-        startX=e.clientX; startY=e.clientY; e.preventDefault();
-    });
-    window.addEventListener("mousemove",(e)=>{
-        if(!dragging && !resizing) return;
-        const media=getMedia();
-        if(dragging){ const dx=e.clientX-startX; const dy=e.clientY-startY; el.style.left=media[index].x+dx+"px"; el.style.top=media[index].y+dy+"px"; }
-        if(resizing){ const dx=e.clientX-startX; const dy=e.clientY-startY; el.style.width=startW+dx+"px"; el.style.height=startH+dy+"px"; }
-    });
-    window.addEventListener("mouseup",(e)=>{
-        const media=getMedia();
-        if(dragging){ media[index].x=parseInt(el.style.left); media[index].y=parseInt(el.style.top); saveMedia(media); }
-        if(resizing){ media[index].width=parseInt(el.style.width); media[index].height=parseInt(el.style.height); saveMedia(media); }
-        dragging=false; resizing=false;
+let editMode = false;
+
+function renderMedia() {
+    if (!db) return;
+
+    bgCanvas.innerHTML = "";
+
+    getAllMedia(items => {
+        items.forEach(item => {
+            const div = document.createElement("div");
+            div.className = "media-item";
+            div.style.left = item.x + "px";
+            div.style.top = item.y + "px";
+            div.style.width = item.width + "px";
+            div.style.height = item.height + "px";
+
+            const img = document.createElement("img");
+            img.src = URL.createObjectURL(item.file);
+            div.appendChild(img);
+
+            const del = document.createElement("button");
+            del.textContent = "✕";
+            del.className = "deleteBtn";
+            del.onclick = () => deleteMedia(item.id);
+
+            if (editMode) del.style.display = "block";
+
+            div.appendChild(del);
+            bgCanvas.appendChild(div);
+        });
     });
 }
 
-/* INIT */
-loadResetTime(); checkDailyReset(); render();
+/* =============================
+   EDIT MODE
+============================= */
+
+document.getElementById("editModeBtn").onclick = () => {
+    editMode = !editMode;
+    renderMedia();
+};
 </script>
-</body>
-</html>
