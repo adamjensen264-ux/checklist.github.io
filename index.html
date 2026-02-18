@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Checklist with Date-Specific and Daily Tasks</title>
+<title>Checklist with Daily & Date-Specific Tasks</title>
 <style>
 body { margin:0; font-family:Arial,sans-serif; background:#111; color:white; text-align:center; }
 .container { max-width:800px; margin:40px auto; background:#1e1e1e; padding:20px; border-radius:10px; position:relative; z-index:2; }
@@ -66,11 +66,11 @@ let selectedDate = new Date().toISOString().split("T")[0];
 document.getElementById("datePicker").value = selectedDate;
 
 /* ===== HISTORY STORAGE ===== */
-function getHistory(){ return load("checklistHistory", {}); }
-function saveHistory(h){ save("checklistHistory", h); }
+let checklistHistory = load("checklistHistory", {});
+function getHistory(){ return checklistHistory; }
+function saveHistory(){ save("checklistHistory", checklistHistory); }
 function ensureDateExists(date){
-  const history = getHistory();
-  if(!history[date]) history[date] = {dailyTasksDone: dailyTasksGlobal.map(()=>false), customTasks: []};
+  if(!checklistHistory[date]) checklistHistory[date] = {dailyTasksDone: dailyTasksGlobal.map(()=>false), customTasks: []};
 }
 
 /* ===== RENDER DAILY TASKS ===== */
@@ -78,8 +78,7 @@ const dailyList=document.getElementById("dailyList");
 let draggedDailyIndex=null;
 function renderDailyTasks(){
   ensureDateExists(selectedDate);
-  const history=getHistory();
-  const doneArray=history[selectedDate].dailyTasksDone;
+  const doneArray=checklistHistory[selectedDate].dailyTasksDone;
   dailyList.innerHTML="";
   dailyTasksGlobal.forEach((t,i)=>{
     const li=document.createElement("li");
@@ -90,9 +89,8 @@ function renderDailyTasks(){
       <button class="editBtn">✎</button>
     `;
     li.querySelector("input").onchange = e=>{
-      const history=getHistory();
-      history[selectedDate].dailyTasksDone[i]=e.target.checked;
-      saveHistory(history);
+      checklistHistory[selectedDate].dailyTasksDone[i]=e.target.checked;
+      saveHistory();
     };
     li.querySelector(".editBtn").onclick = ()=>{
       const newText = prompt("Edit daily task:", dailyTasksGlobal[i].text);
@@ -108,10 +106,9 @@ function renderDailyTasks(){
       const [moved]=dailyTasksGlobal.splice(draggedDailyIndex,1);
       dailyTasksGlobal.splice(i,0,moved);
       save("dailyTasksGlobal", dailyTasksGlobal);
-      const history=getHistory();
-      const doneMoved=history[selectedDate].dailyTasksDone.splice(draggedDailyIndex,1)[0];
-      history[selectedDate].dailyTasksDone.splice(i,0,doneMoved);
-      saveHistory(history);
+      const doneMoved=checklistHistory[selectedDate].dailyTasksDone.splice(draggedDailyIndex,1)[0];
+      checklistHistory[selectedDate].dailyTasksDone.splice(i,0,doneMoved);
+      saveHistory();
       renderDailyTasks();
     });
     dailyList.appendChild(li);
@@ -123,8 +120,7 @@ const customList=document.getElementById("customList");
 let draggedCustomIndex=null;
 function renderCustomTasks(){
   ensureDateExists(selectedDate);
-  const history=getHistory();
-  const tasks=history[selectedDate].customTasks;
+  const tasks=checklistHistory[selectedDate].customTasks;
   customList.innerHTML="";
   tasks.forEach((t,i)=>{
     const li=document.createElement("li");
@@ -133,23 +129,20 @@ function renderCustomTasks(){
     li.innerHTML=`<span><input type="checkbox" ${t.done?"checked":""}> ${t.text}</span>
                   <button>X</button>`;
     li.querySelector("input").onchange = e=>{
-      const history=getHistory();
-      history[selectedDate].customTasks[i].done=e.target.checked;
-      saveHistory(history);
+      checklistHistory[selectedDate].customTasks[i].done=e.target.checked;
+      saveHistory();
     };
     li.querySelector("button").onclick = ()=>{
-      const history=getHistory();
-      history[selectedDate].customTasks.splice(i,1);
-      saveHistory(history);
+      checklistHistory[selectedDate].customTasks.splice(i,1);
+      saveHistory();
       renderCustomTasks();
     };
     li.addEventListener("dragstart", ()=>{ draggedCustomIndex=i; });
     li.addEventListener("dragover", e=>e.preventDefault());
     li.addEventListener("drop", ()=>{
-      const history=getHistory();
-      const [moved]=history[selectedDate].customTasks.splice(draggedCustomIndex,1);
-      history[selectedDate].customTasks.splice(i,0,moved);
-      saveHistory(history);
+      const [moved]=checklistHistory[selectedDate].customTasks.splice(draggedCustomIndex,1);
+      checklistHistory[selectedDate].customTasks.splice(i,0,moved);
+      saveHistory();
       renderCustomTasks();
     });
     customList.appendChild(li);
@@ -192,13 +185,17 @@ window.addEventListener("message", e=>{
   if(type==="daily"){
     dailyTasksGlobal.push({text});
     save("dailyTasksGlobal", dailyTasksGlobal);
+    // Update dailyTasksDone array for all dates
+    for(let d in checklistHistory){
+      checklistHistory[d].dailyTasksDone.push(false);
+    }
     renderDailyTasks();
+    saveHistory();
   } else if(type==="date"){
     ensureDateExists(date);
-    const history=getHistory();
-    history[date].customTasks.push({text,done:false});
-    saveHistory(history);
+    checklistHistory[date].customTasks.push({text,done:false});
     if(date===selectedDate) renderCustomTasks();
+    saveHistory();
   }
 });
 
@@ -216,9 +213,8 @@ resetInput.onchange = ()=> localStorage.setItem("resetTime", resetInput.value);
 
 document.getElementById("manualReset").onclick = ()=>{
   ensureDateExists(selectedDate);
-  const history=getHistory();
-  history[selectedDate].dailyTasksDone=dailyTasksGlobal.map(()=>false);
-  saveHistory(history);
+  checklistHistory[selectedDate].dailyTasksDone=dailyTasksGlobal.map(()=>false);
+  saveHistory();
   renderDailyTasks();
 };
 
@@ -231,9 +227,8 @@ function checkDailyReset(){
   const [h,m]=time.split(":");
   if(now.getHours()>=h && now.getMinutes()>=m){
     ensureDateExists(selectedDate);
-    const history=getHistory();
-    history[selectedDate].dailyTasksDone=dailyTasksGlobal.map(()=>false);
-    saveHistory(history);
+    checklistHistory[selectedDate].dailyTasksDone=dailyTasksGlobal.map(()=>false);
+    saveHistory();
     localStorage.setItem("lastReset",today);
     renderDailyTasks();
   }
