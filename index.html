@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Advanced Checklist with Media</title>
+<title>Jensen Checklist</title>
 <style>
 body {
   margin:0;
@@ -264,16 +264,18 @@ document.getElementById("addTaskButton").onclick = ()=>{
 
 /* ===== HANDLE NEW TASKS FROM POPUP ===== */
 window.addEventListener("message", e=>{
-  const {text,isDaily,isDate,date}=e.data;
+  const { text, isDaily, isDate, date } = e.data;
+
   if(isDaily){
     dailyTasksGlobal.push({text});
     save("dailyTasksGlobal", dailyTasksGlobal);
-    renderDailyTasks();
+    renderDailyTasks();        // <-- ensures immediate update
   }
+
   if(isDate){
     ensureDateExists(date);
     const history=getHistory();
-    history[date].customTasks.push({text,done:false});
+    history[date].customTasks.push({text, done:false});
     saveHistory(history);
     if(date===selectedDate) renderCustomTasks();
   }
