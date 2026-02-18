@@ -1,224 +1,387 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Checklist with Editable Media</title>
+<title>Daily Checklist</title>
+
 <style>
-body { font-family: Arial, sans-serif; margin:0; padding:0; height:100vh; background:#111; color:white; display:flex; justify-content:center; align-items:flex-start; overflow:hidden;}
-#mediaCanvas { position:fixed; top:0; left:0; width:100%; height:100%; z-index:0; pointer-events:none; }
-.media-item { position:absolute; cursor:move; z-index:1; display:flex; justify-content:center; align-items:center; }
-.media-item img { display:block; width:100%; height:100%; object-fit:contain; pointer-events:none; }
-.media-item .deleteBtn { position:absolute; top:0; right:0; background:red; color:white; border:none; font-size:12px; padding:2px 4px; cursor:pointer; display:none; z-index:5; }
-.container { background:#1c1c1ccc; padding:25px; border-radius:12px; width:380px; margin-top:30px; box-shadow:0 0 20px rgba(0,0,0,0.5); z-index:2; position:relative; }
-.task { display:flex; justify-content:space-between; align-items:center; margin:8px 0; padding:5px 8px; border-radius:6px; background:#222; cursor: grab; }
-.task.dragging { opacity:0.5; }
-button { background:#333; border:none; color:white; padding:6px 10px; border-radius:6px; cursor:pointer; }
-button:hover { background:#555; }
-input[type="text"], input[type="time"] { width:70%; padding:6px; }
-.controls { margin-top:10px; display:flex; gap:8px; }
-.small { font-size:13px; color:#aaa; text-align:center; margin-top:10px; }
-#addMediaBtn { width:60px; height:60px; border:2px dashed #fff; border-radius:8px; display:flex; justify-content:center; align-items:center; font-size:24px; cursor:pointer; color:#fff; user-select:none; position:fixed; bottom:10px; left:50%; transform:translateX(-50%); z-index:3; }
+body{
+  font-family:Arial;
+  background:#111;
+  color:white;
+  text-align:center;
+  margin:0;
+}
+
+.container{
+  position:relative;
+  z-index:2;
+  max-width:600px;
+  margin:auto;
+  padding:20px;
+  background:#1e1e1e;
+  border-radius:10px;
+}
+
+ul{list-style:none;padding:0}
+li{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  background:#2a2a2a;
+  margin:6px 0;
+  padding:8px;
+  border-radius:6px;
+  cursor:grab;
+}
+
+button{
+  padding:6px 10px;
+  margin:5px;
+  border:none;
+  border-radius:6px;
+  background:#6b5cff;
+  color:white;
+  cursor:pointer;
+}
+
+input[type=text]{
+  padding:6px;
+  width:70%;
+}
+
+/* MEDIA AREA */
+#mediaLayer{
+  position:fixed;
+  inset:0;
+  z-index:1;
+  pointer-events:none;
+}
+
+.mediaItem{
+  position:absolute;
+  pointer-events:auto;
+}
+
+.mediaItem img{
+  width:100%;
+  height:100%;
+  object-fit:cover;
+  border-radius:8px;
+}
+
+.deleteMedia{
+  position:absolute;
+  top:-10px;
+  right:-10px;
+  background:red;
+  border-radius:50%;
+  width:22px;
+  height:22px;
+  display:none;
+  font-size:14px;
+}
+
+.resizeHandle{
+  width:14px;
+  height:14px;
+  background:white;
+  position:absolute;
+  right:0;
+  bottom:0;
+  cursor:nwse-resize;
+  display:none;
+}
+
+.editing .deleteMedia,
+.editing .resizeHandle{
+  display:block;
+}
 </style>
 </head>
+
 <body>
 
-<div id="mediaCanvas"></div>
+<div id="mediaLayer"></div>
 
 <div class="container">
-<h1>Daily Checklist</h1>
-<div id="taskList"></div>
+<h2>Daily Checklist</h2>
 
-<div class="controls">
-    <input id="newTask" type="text" placeholder="New task...">
-    <button onclick="addTask()">Add</button>
+<input id="taskInput" placeholder="New task">
+<button id="addTaskBtn">Add Task</button>
+
+<ul id="taskList"></ul>
+
+<div>
+Reset Time:
+<input type="time" id="resetTime">
+<button id="resetBtn">Manual Reset</button>
 </div>
 
 <hr>
 
-<div>
-    Reset Time:
-    <input type="time" id="resetTime">
-</div>
+<button id="editMediaBtn">Edit Media</button>
+<button id="addMediaBtn">+ Media</button>
+<input type="file" id="mediaInput" accept="image/*,image/gif" multiple hidden>
 
-<div class="controls">
-    <button onclick="manualReset()">Reset Now</button>
-    <button id="editModeBtn">Enter Edit Mode</button>
 </div>
-
-<div class="small" id="info"></div>
-</div>
-
-<div id="addMediaBtn">+</div>
-<input type="file" id="mediaInput" accept="image/*,image/gif" style="display:none" multiple>
 
 <script>
-/* STORAGE KEYS */
-const TASK_KEY="tasks", RESET_TIME_KEY="resetTime", LAST_RESET_KEY="lastReset", MEDIA_KEY="mediaFiles";
+/* ================= STORAGE ================= */
 
-/* TASKS */
-function getTasks(){return JSON.parse(localStorage.getItem(TASK_KEY))||[];}
-function saveTasks(tasks){localStorage.setItem(TASK_KEY, JSON.stringify(tasks));}
+const getTasks=()=>JSON.parse(localStorage.getItem("tasks")||"[]");
+const saveTasks=t=>localStorage.setItem("tasks",JSON.stringify(t));
 
-/* RENDER TASKS */
-const taskListEl=document.getElementById("taskList");
-let dragSrcIndex=null;
-function render(){ renderTasks(); renderMedia(); updateInfo(); }
+const getMedia=()=>JSON.parse(localStorage.getItem("media")||"[]");
+const saveMedia=m=>localStorage.setItem("media",JSON.stringify(m));
+
+/* ================= TASKS ================= */
+
+const list=document.getElementById("taskList");
 
 function renderTasks(){
-    taskListEl.innerHTML="";
-    const tasks=getTasks();
-    tasks.forEach((task,index)=>{
-        const div=document.createElement("div"); div.className="task"; div.draggable=true;
-        const label=document.createElement("label");
-        const checkbox=document.createElement("input"); checkbox.type="checkbox"; checkbox.checked=task.checked;
-        checkbox.onchange=()=>{tasks[index].checked=checkbox.checked; saveTasks(tasks);}
-        label.appendChild(checkbox); label.append(" "+task.text);
-        const delBtn=document.createElement("button"); delBtn.textContent="✕";
-        delBtn.onclick=()=>{ tasks.splice(index,1); saveTasks(tasks); render(); }
-        div.appendChild(label); div.appendChild(delBtn); taskListEl.appendChild(div);
+  list.innerHTML="";
+  const tasks=getTasks();
 
-        div.addEventListener("dragstart",(e)=>{ dragSrcIndex=index; div.classList.add("dragging"); });
-        div.addEventListener("dragend",()=>{ div.classList.remove("dragging"); });
-        div.addEventListener("dragover",(e)=>{ e.preventDefault(); });
-        div.addEventListener("drop",(e)=>{ 
-            e.preventDefault();
-            if(dragSrcIndex===null || dragSrcIndex===index) return;
-            const moved=tasks.splice(dragSrcIndex,1)[0];
-            tasks.splice(index,0,moved);
-            saveTasks(tasks);
-            render();
-        });
-    });
+  tasks.forEach((t,i)=>{
+    const li=document.createElement("li");
+    li.draggable=true;
+    li.dataset.index=i;
+
+    li.innerHTML=`
+      <span>
+        <input type="checkbox" ${t.done?"checked":""}>
+        ${t.text}
+      </span>
+      <button class="deleteTask">X</button>
+    `;
+    list.appendChild(li);
+  });
 }
 
-function addTask(){ const t=document.getElementById("newTask").value.trim(); if(!t) return; const tasks=getTasks(); tasks.push({text:t,checked:false}); saveTasks(tasks); document.getElementById("newTask").value=""; render(); }
-function manualReset(){ const tasks=getTasks(); tasks.forEach(t=>t.checked=false); saveTasks(tasks); localStorage.setItem(LAST_RESET_KEY, Date.now()); render(); }
-function getResetMinutes(){ const v=localStorage.getItem(RESET_TIME_KEY)||"04:00"; const [h,m]=v.split(":").map(Number); return h*60+m; }
-function checkDailyReset(){ const last=Number(localStorage.getItem(LAST_RESET_KEY)||0); const now=new Date(); const minutesNow=now.getHours()*60+now.getMinutes(); const resetM=getResetMinutes(); const resetDate=new Date(); resetDate.setHours(0,0,0,0); resetDate.setMinutes(resetM); if(minutesNow<resetM) resetDate.setDate(resetDate.getDate()-1); if(last<resetDate.getTime()){ manualReset(); localStorage.setItem(LAST_RESET_KEY,resetDate.getTime()); } }
+document.getElementById("addTaskBtn").onclick=()=>{
+  const input=document.getElementById("taskInput");
+  if(!input.value.trim()) return;
+  const tasks=getTasks();
+  tasks.push({text:input.value,done:false});
+  saveTasks(tasks);
+  input.value="";
+  renderTasks();
+};
+
+list.addEventListener("click",e=>{
+  const li=e.target.closest("li");
+  if(!li) return;
+  const idx=li.dataset.index;
+  const tasks=getTasks();
+
+  if(e.target.type==="checkbox"){
+    tasks[idx].done=e.target.checked;
+  }
+
+  if(e.target.classList.contains("deleteTask")){
+    tasks.splice(idx,1);
+  }
+
+  saveTasks(tasks);
+  renderTasks();
+});
+
+/* DRAG SORT */
+let dragIndex=null;
+
+list.addEventListener("dragstart",e=>{
+  dragIndex=e.target.dataset.index;
+});
+
+list.addEventListener("dragover",e=>e.preventDefault());
+
+list.addEventListener("drop",e=>{
+  const target=e.target.closest("li");
+  if(!target) return;
+
+  const tasks=getTasks();
+  const moved=tasks.splice(dragIndex,1)[0];
+  tasks.splice(target.dataset.index,0,moved);
+
+  saveTasks(tasks);
+  renderTasks();
+});
+
+/* ================= RESET ================= */
+
+document.getElementById("resetBtn").onclick=()=>{
+  const tasks=getTasks().map(t=>({...t,done:false}));
+  saveTasks(tasks);
+  renderTasks();
+};
+
 const resetInput=document.getElementById("resetTime");
-function loadResetTime(){ resetInput.value=localStorage.getItem(RESET_TIME_KEY)||"04:00"; }
-resetInput.addEventListener("change",()=>{ localStorage.setItem(RESET_TIME_KEY,resetInput.value); updateInfo(); });
-function updateInfo(){ document.getElementById("info").textContent=`Checklist resets daily at ${localStorage.getItem(RESET_TIME_KEY)||"04:00"}`; }
+resetInput.value=localStorage.getItem("resetTime")||"04:00";
 
-/* MEDIA */
-<script>
-/* =============================
-   INDEXED DB SETUP
-============================= */
-
-let db;
-
-const request = indexedDB.open("ChecklistMediaDB", 1);
-
-request.onupgradeneeded = e => {
-    db = e.target.result;
-    db.createObjectStore("media", { keyPath: "id", autoIncrement: true });
+resetInput.onchange=()=>{
+  localStorage.setItem("resetTime",resetInput.value);
 };
 
-request.onsuccess = e => {
-    db = e.target.result;
-    renderMedia();
-};
+function checkDailyReset(){
+  const time=localStorage.getItem("resetTime");
+  if(!time) return;
 
-function addMediaToDB(file, callback) {
-    const tx = db.transaction("media", "readwrite");
-    const store = tx.objectStore("media");
+  const now=new Date();
+  const today=now.toDateString();
 
-    store.add({
-        file: file,
-        x: 50,
-        y: 50,
-        width: 150,
-        height: 150
-    });
+  if(localStorage.getItem("lastReset")===today) return;
 
-    tx.oncomplete = callback;
+  const [h,m]=time.split(":");
+  if(now.getHours()>=h && now.getMinutes()>=m){
+    const tasks=getTasks().map(t=>({...t,done:false}));
+    saveTasks(tasks);
+    localStorage.setItem("lastReset",today);
+    renderTasks();
+  }
 }
 
-function getAllMedia(callback) {
-    const tx = db.transaction("media", "readonly");
-    const store = tx.objectStore("media");
-    const req = store.getAll();
+setInterval(checkDailyReset,30000);
 
-    req.onsuccess = () => callback(req.result);
+/* ================= MEDIA ================= */
+
+const mediaLayer=document.getElementById("mediaLayer");
+const fileInput=document.getElementById("mediaInput");
+let editMode=false;
+
+function renderMedia(){
+  mediaLayer.innerHTML="";
+  const media=getMedia();
+
+  media.forEach((m,i)=>{
+    const div=document.createElement("div");
+    div.className="mediaItem";
+    if(editMode) div.classList.add("editing");
+
+    div.style.left=m.x+"px";
+    div.style.top=m.y+"px";
+    div.style.width=m.w+"px";
+    div.style.height=m.h+"px";
+
+    div.innerHTML=`
+      <img src="${m.src}">
+      <button class="deleteMedia">×</button>
+      <div class="resizeHandle"></div>
+    `;
+
+    /* delete */
+    div.querySelector(".deleteMedia").onclick=()=>{
+      const arr=getMedia();
+      arr.splice(i,1);
+      saveMedia(arr);
+      renderMedia();
+    };
+
+    /* drag move */
+    let moving=false,ox,oy;
+
+    div.onmousedown=e=>{
+      if(!editMode || e.target.className==="resizeHandle") return;
+      moving=true;
+      ox=e.clientX-div.offsetLeft;
+      oy=e.clientY-div.offsetTop;
+    };
+
+    document.onmousemove=e=>{
+      if(!moving) return;
+      div.style.left=e.clientX-ox+"px";
+      div.style.top=e.clientY-oy+"px";
+    };
+
+    document.onmouseup=()=>{
+      if(!moving) return;
+      moving=false;
+      const arr=getMedia();
+      arr[i].x=div.offsetLeft;
+      arr[i].y=div.offsetTop;
+      saveMedia(arr);
+    };
+
+    /* resize */
+    const handle=div.querySelector(".resizeHandle");
+    let resizing=false,sx,sy,sw,sh;
+
+    handle.onmousedown=e=>{
+      e.stopPropagation();
+      resizing=true;
+      sx=e.clientX;
+      sy=e.clientY;
+      sw=div.offsetWidth;
+      sh=div.offsetHeight;
+    };
+
+    document.onmousemove=e=>{
+      if(!resizing) return;
+      div.style.width=sw+(e.clientX-sx)+"px";
+      div.style.height=sh+(e.clientY-sy)+"px";
+    };
+
+    document.onmouseup=()=>{
+      if(!resizing) return;
+      resizing=false;
+      const arr=getMedia();
+      arr[i].w=div.offsetWidth;
+      arr[i].h=div.offsetHeight;
+      saveMedia(arr);
+    };
+
+    mediaLayer.appendChild(div);
+  });
 }
 
-function deleteMedia(id) {
-    const tx = db.transaction("media", "readwrite");
-    tx.objectStore("media").delete(id);
-    tx.oncomplete = renderMedia;
-}
-
-/* =============================
-   ADD MEDIA
-============================= */
-
-const mediaInput = document.getElementById("mediaInput");
-const addMediaBtn = document.getElementById("addMediaBtn");
-const bgCanvas = document.getElementById("mediaCanvas");
-
-addMediaBtn.onclick = () => {
-    mediaInput.value = "";
-    mediaInput.click();
+/* ADD MEDIA (FIXED MULTI-UPLOAD) */
+document.getElementById("addMediaBtn").onclick=()=>{
+  fileInput.click();
 };
 
-mediaInput.onchange = e => {
-    const files = [...e.target.files];
+fileInput.addEventListener("change",e=>{
+  const files=[...e.target.files];
+  if(!files.length) return;
 
-    let remaining = files.length;
+  const media=getMedia();
+  let loaded=0;
 
-    files.forEach(file => {
-        addMediaToDB(file, () => {
-            remaining--;
-            if (remaining === 0) renderMedia();
-        });
-    });
+  files.forEach(file=>{
+    const reader=new FileReader();
+    reader.onload=ev=>{
+      media.push({
+        src:ev.target.result,
+        x:100+loaded*20,
+        y:100+loaded*20,
+        w:200,
+        h:200
+      });
+
+      loaded++;
+      if(loaded===files.length){
+        saveMedia(media);
+        renderMedia();
+      }
+    };
+    reader.readAsDataURL(file);
+  });
+
+  /* CRITICAL FIX */
+  fileInput.value="";
+});
+
+/* EDIT MODE */
+document.getElementById("editMediaBtn").onclick=()=>{
+  editMode=!editMode;
+  renderMedia();
 };
 
-/* =============================
-   RENDER MEDIA
-============================= */
+/* ================= INIT ================= */
 
-let editMode = false;
-
-function renderMedia() {
-    if (!db) return;
-
-    bgCanvas.innerHTML = "";
-
-    getAllMedia(items => {
-        items.forEach(item => {
-            const div = document.createElement("div");
-            div.className = "media-item";
-            div.style.left = item.x + "px";
-            div.style.top = item.y + "px";
-            div.style.width = item.width + "px";
-            div.style.height = item.height + "px";
-
-            const img = document.createElement("img");
-            img.src = URL.createObjectURL(item.file);
-            div.appendChild(img);
-
-            const del = document.createElement("button");
-            del.textContent = "✕";
-            del.className = "deleteBtn";
-            del.onclick = () => deleteMedia(item.id);
-
-            if (editMode) del.style.display = "block";
-
-            div.appendChild(del);
-            bgCanvas.appendChild(div);
-        });
-    });
-}
-
-/* =============================
-   EDIT MODE
-============================= */
-
-document.getElementById("editModeBtn").onclick = () => {
-    editMode = !editMode;
-    renderMedia();
-};
+renderTasks();
+renderMedia();
+checkDailyReset();
 </script>
+
+</body>
+</html>
