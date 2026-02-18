@@ -1,10 +1,142 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>My Website</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Daily Checklist</title>
+
+<style>
+    body {
+        font-family: Arial, sans-serif;
+        background: #111;
+        color: white;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+    }
+
+    .container {
+        background: #1c1c1c;
+        padding: 25px;
+        border-radius: 10px;
+        width: 350px;
+        box-shadow: 0 0 15px rgba(0,0,0,0.5);
+    }
+
+    h1 {
+        text-align: center;
+    }
+
+    label {
+        display: block;
+        margin: 10px 0;
+        font-size: 18px;
+        cursor: pointer;
+    }
+
+    input[type="checkbox"] {
+        margin-right: 10px;
+        transform: scale(1.2);
+    }
+
+    .time {
+        text-align: center;
+        font-size: 14px;
+        color: #aaa;
+        margin-top: 10px;
+    }
+</style>
 </head>
+
 <body>
-  <h1>Hello World!</h1>
-  <p>This site is hosted with GitHub Pages.</p>
+
+<div class="container">
+    <h1>Daily Checklist</h1>
+
+    <label><input type="checkbox" data-id="1"> Workout</label>
+    <label><input type="checkbox" data-id="2"> Drink Water</label>
+    <label><input type="checkbox" data-id="3"> Read</label>
+    <label><input type="checkbox" data-id="4"> Code Practice</label>
+
+    <div class="time" id="resetInfo"></div>
+</div>
+
+<script>
+/*
+    ===== SETTINGS =====
+    Set your daily reset time here (24-hour format)
+*/
+const RESET_HOUR = 4;   // 4 AM
+const RESET_MINUTE = 0;
+
+/* ==================== */
+
+const checkboxes = document.querySelectorAll("input[type=checkbox]");
+const STORAGE_KEY = "dailyChecklist";
+
+/* Load saved state */
+function loadChecklist() {
+    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY)) || {};
+    checkboxes.forEach(cb => {
+        cb.checked = saved[cb.dataset.id] || false;
+    });
+}
+
+/* Save state */
+function saveChecklist() {
+    const state = {};
+    checkboxes.forEach(cb => {
+        state[cb.dataset.id] = cb.checked;
+    });
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+}
+
+/* Calculate today's reset timestamp */
+function getTodayResetTime() {
+    const now = new Date();
+    const reset = new Date();
+
+    reset.setHours(RESET_HOUR, RESET_MINUTE, 0, 0);
+
+    // If current time is before reset time,
+    // use yesterday's reset as last reset
+    if (now < reset) {
+        reset.setDate(reset.getDate() - 1);
+    }
+
+    return reset.getTime();
+}
+
+/* Reset checklist if needed */
+function checkForReset() {
+    const lastReset = localStorage.getItem("lastReset");
+    const todayReset = getTodayResetTime();
+
+    if (!lastReset || Number(lastReset) < todayReset) {
+        checkboxes.forEach(cb => cb.checked = false);
+        saveChecklist();
+        localStorage.setItem("lastReset", todayReset);
+    }
+}
+
+/* Show reset info */
+function updateResetText() {
+    document.getElementById("resetInfo").textContent =
+        `Resets daily at ${String(RESET_HOUR).padStart(2,"0")}:${String(RESET_MINUTE).padStart(2,"0")}`;
+}
+
+/* Event listeners */
+checkboxes.forEach(cb =>
+    cb.addEventListener("change", saveChecklist)
+);
+
+/* Initialize */
+checkForReset();
+loadChecklist();
+updateResetText();
+
+</script>
+
 </body>
 </html>
