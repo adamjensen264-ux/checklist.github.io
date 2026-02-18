@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Daily Checklist with History</title>
+<title>Daily Checklist with Custom Tasks</title>
 <style>
 body {
   margin:0;
@@ -46,20 +46,27 @@ button {
 input[type=text], input[type=date], input[type=time] {
   padding:6px;
 }
+.editBtn {
+  background:#ffb400;
+  margin-left:6px;
+}
 </style>
 </head>
 <body>
 
 <div class="container">
-<h2>Daily Checklist with History</h2>
+<h2>Daily Checklist with Custom Tasks</h2>
 
 <label>Select Date:</label>
 <input type="date" id="datePicker"><br><br>
 
-<input type="text" id="taskInput" placeholder="New custom task">
-<button id="addTask">Add Task</button>
+<h3>Daily Tasks</h3>
+<ul id="dailyList"></ul>
 
-<ul id="taskList"></ul>
+<h3>Custom Tasks</h3>
+<input type="text" id="customTaskInput" placeholder="New custom task">
+<button id="addCustomTask">Add Task</button>
+<ul id="customList"></ul>
 
 <br>
 <label>Daily Reset Time:</label>
@@ -72,113 +79,136 @@ input[type=text], input[type=date], input[type=time] {
 const load = (key, def) => JSON.parse(localStorage.getItem(key) || JSON.stringify(def));
 const save = (key, val) => localStorage.setItem(key, JSON.stringify(val));
 
-/* ===== INITIAL DATA ===== */
-const baseDailyTasks = [
-  {text:"Wake up early", done:false},
-  {text:"Workout", done:false},
-  {text:"Breakfast", done:false},
-  {text:"Work/Study", done:false},
-  {text:"Dinner", done:false}
-];
+/* ===== GLOBAL DAILY TASKS ===== */
+let dailyTasksGlobal = load("dailyTasksGlobal", [
+  {text:"Wake up early"},
+  {text:"Workout"},
+  {text:"Breakfast"},
+  {text:"Work/Study"},
+  {text:"Dinner"}
+]);
 
+/* ===== DATE PICKER ===== */
 let selectedDate = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
 document.getElementById("datePicker").value = selectedDate;
 
-function getHistory(){
-  return load("checklistHistory", {});
-}
-
-function saveHistory(history){
-  save("checklistHistory", history);
-}
-
+/* ===== CHECKLIST HISTORY ===== */
+function getHistory(){ return load("checklistHistory", {}); }
+function saveHistory(h){ save("checklistHistory", h); }
 function ensureDateExists(date){
   const history = getHistory();
   if(!history[date]){
-    history[date] = {
-      dailyTasks: baseDailyTasks.map(t=>({...t})), 
-      customTasks: []
-    };
+    history[date] = { dailyTasksDone: dailyTasksGlobal.map(()=>false), customTasks: [] };
     saveHistory(history);
   }
 }
 
-/* ===== TASK RENDERING ===== */
-const taskList = document.getElementById("taskList");
-let draggedTaskIndex = null;
+/* ===== RENDER DAILY TASKS ===== */
+const dailyList = document.getElementById("dailyList");
+let draggedDailyIndex = null;
 
-function renderTasks(){
+function renderDailyTasks(){
   ensureDateExists(selectedDate);
   const history = getHistory();
-  const daily = history[selectedDate].dailyTasks;
-  const custom = history[selectedDate].customTasks;
-  const tasks = [...daily, ...custom];
+  const doneArray = history[selectedDate].dailyTasksDone;
 
-  taskList.innerHTML = "";
-  tasks.forEach((t,i)=>{
+  dailyList.innerHTML="";
+  dailyTasksGlobal.forEach((t,i)=>{
     const li = document.createElement("li");
     li.draggable = true;
     li.dataset.index = i;
     li.innerHTML = `
-      <span><input type="checkbox" ${t.done?"checked":""}> ${t.text}</span>
-      <button>X</button>
+      <span><input type="checkbox" ${doneArray[i]?"checked":""}> ${t.text}</span>
+      <button class="editBtn">✎</button>
     `;
-
+    // checkbox toggle
     li.querySelector("input").onchange = e=>{
       const history = getHistory();
-      const targetArray = i < daily.length ? history[selectedDate].dailyTasks : history[selectedDate].customTasks;
-      const idx = i < daily.length ? i : i - daily.length;
-      targetArray[idx].done = e.target.checked;
+      history[selectedDate].dailyTasksDone[i] = e.target.checked;
       saveHistory(history);
     };
-
-    li.querySelector("button").onclick = ()=>{
-      const history = getHistory();
-      if(i < daily.length){
-        history[selectedDate].dailyTasks.splice(i,1);
-      } else {
-        history[selectedDate].customTasks.splice(i-daily.length,1);
+    // edit text
+    li.querySelector(".editBtn").onclick = ()=>{
+      const newText = prompt("Edit daily task:", dailyTasksGlobal[i].text);
+      if(newText!==null && newText.trim()!==""){
+        dailyTasksGlobal[i].text = newText.trim();
+        save("dailyTasksGlobal", dailyTasksGlobal);
+        renderDailyTasks();
       }
-      saveHistory(history);
-      renderTasks();
     };
-
-    // Drag & Drop reordering within current date
-    li.addEventListener("dragstart",()=>{ draggedTaskIndex=i; });
-    li.addEventListener("dragover",e=>e.preventDefault());
-    li.addEventListener("drop",()=>{
+    // drag and drop to reorder
+    li.addEventListener("dragstart", ()=>{ draggedDailyIndex=i; });
+    li.addEventListener("dragover", e=>e.preventDefault());
+    li.addEventListener("drop", ()=>{
+      const [moved] = dailyTasksGlobal.splice(draggedDailyIndex,1);
+      dailyTasksGlobal.splice(i,0,moved);
+      save("dailyTasksGlobal", dailyTasksGlobal);
       const history = getHistory();
-      const targetArray = i < daily.length ? history[selectedDate].dailyTasks : history[selectedDate].customTasks;
-      const sourceArray = draggedTaskIndex < daily.length ? history[selectedDate].dailyTasks : history[selectedDate].customTasks;
-      const sourceIdx = draggedTaskIndex < daily.length ? draggedTaskIndex : draggedTaskIndex - daily.length;
-      const targetIdx = i < daily.length ? i : i - daily.length;
-      const [moved] = sourceArray.splice(sourceIdx,1);
-      targetArray.splice(targetIdx,0,moved);
+      const doneMoved = history[selectedDate].dailyTasksDone.splice(draggedDailyIndex,1)[0];
+      history[selectedDate].dailyTasksDone.splice(i,0,doneMoved);
       saveHistory(history);
-      renderTasks();
+      renderDailyTasks();
     });
-
-    taskList.appendChild(li);
+    dailyList.appendChild(li);
   });
 }
 
-/* ===== ADD CUSTOM TASK ===== */
-document.getElementById("addTask").onclick = ()=>{
-  const input = document.getElementById("taskInput");
+/* ===== CUSTOM TASKS ===== */
+const customList = document.getElementById("customList");
+let draggedCustomIndex = null;
+
+function renderCustomTasks(){
+  ensureDateExists(selectedDate);
+  const history = getHistory();
+  const tasks = history[selectedDate].customTasks;
+
+  customList.innerHTML="";
+  tasks.forEach((t,i)=>{
+    const li=document.createElement("li");
+    li.draggable = true;
+    li.dataset.index = i;
+    li.innerHTML = `<span><input type="checkbox" ${t.done?"checked":""}> ${t.text}</span>
+                    <button>X</button>`;
+    li.querySelector("input").onchange = e=>{
+      const history = getHistory();
+      history[selectedDate].customTasks[i].done = e.target.checked;
+      saveHistory(history);
+    };
+    li.querySelector("button").onclick = ()=>{
+      const history = getHistory();
+      history[selectedDate].customTasks.splice(i,1);
+      saveHistory(history);
+      renderCustomTasks();
+    };
+    li.addEventListener("dragstart", ()=>{ draggedCustomIndex=i; });
+    li.addEventListener("dragover", e=>e.preventDefault());
+    li.addEventListener("drop", ()=>{
+      const history = getHistory();
+      const [moved] = history[selectedDate].customTasks.splice(draggedCustomIndex,1);
+      history[selectedDate].customTasks.splice(i,0,moved);
+      saveHistory(history);
+      renderCustomTasks();
+    });
+    customList.appendChild(li);
+  });
+}
+
+document.getElementById("addCustomTask").onclick = ()=>{
+  const input = document.getElementById("customTaskInput");
   if(!input.value.trim()) return;
   ensureDateExists(selectedDate);
   const history = getHistory();
-  history[selectedDate].customTasks.push({text: input.value, done:false});
+  history[selectedDate].customTasks.push({text: input.value.trim(), done:false});
   saveHistory(history);
   input.value="";
-  renderTasks();
+  renderCustomTasks();
 };
 
-/* ===== DATE PICKER ===== */
+/* ===== DATE PICKER HANDLER ===== */
 document.getElementById("datePicker").onchange = e=>{
   selectedDate = e.target.value;
-  ensureDateExists(selectedDate);
-  renderTasks();
+  renderDailyTasks();
+  renderCustomTasks();
 };
 
 /* ===== RESET SYSTEM ===== */
@@ -189,9 +219,9 @@ resetInput.onchange = ()=> localStorage.setItem("resetTime", resetInput.value);
 document.getElementById("manualReset").onclick = ()=>{
   ensureDateExists(selectedDate);
   const history = getHistory();
-  history[selectedDate].dailyTasks.forEach(t=>t.done=false);
+  history[selectedDate].dailyTasksDone = dailyTasksGlobal.map(()=>false);
   saveHistory(history);
-  renderTasks();
+  renderDailyTasks();
 };
 
 function checkDailyReset(){
@@ -204,17 +234,18 @@ function checkDailyReset(){
   if(now.getHours()>=h && now.getMinutes()>=m){
     ensureDateExists(selectedDate);
     const history = getHistory();
-    history[selectedDate].dailyTasks.forEach(t=>t.done=false);
+    history[selectedDate].dailyTasksDone = dailyTasksGlobal.map(()=>false);
     saveHistory(history);
     localStorage.setItem("lastReset",today);
-    renderTasks();
+    renderDailyTasks();
   }
 }
 setInterval(checkDailyReset,30000);
 
 /* ===== INIT ===== */
 ensureDateExists(selectedDate);
-renderTasks();
+renderDailyTasks();
+renderCustomTasks();
 </script>
 </body>
 </html>
